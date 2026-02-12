@@ -13,12 +13,12 @@ const opts = (id: string) => ({ toolCallId: id, messages: [] as [] });
 
 function makeState(repoPath?: string): VPState {
   const companyDir = path.join(TMP, 'company');
-  const departmentDir = path.join(companyDir, 'departments', 'test');
+  const departmentDir = path.join(companyDir, 'workspaces', 'test');
   mkdirSync(path.join(departmentDir, 'plans'), { recursive: true });
   mkdirSync(path.join(departmentDir, 'prds'), { recursive: true });
 
   return {
-    config: { slug: 'test', name: 'Test', responsibility: 'test stuff' },
+    config: { slug: 'test', name: 'Test', description: 'test stuff' },
     companyConfig: { repo: repoPath ?? '/tmp/fake-repo', worker_type: 'claude_code', departments: [] },
     tracker: new Tracker('test', path.join(companyDir, 'logs')),
     workers: new Map<string, WorkerHandle>(),

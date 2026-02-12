@@ -15,6 +15,8 @@ import * as readline from 'readline';
 export interface UserInputOption {
   label: string;
   description: string;
+  /** When true, selecting this option and pressing Enter opens notes input instead of submitting. */
+  typeIfSelected?: boolean;
 }
 
 export interface UserInputQuestion {
@@ -22,6 +24,7 @@ export interface UserInputQuestion {
   header: string;
   question: string;
   isOther?: boolean;
+  multiSelect?: boolean;
   options?: UserInputOption[];
 }
 
@@ -41,9 +44,9 @@ const ansi = {
   clearLine: `${CSI}2K`,
   reset: `${CSI}0m`,
   dim: (s: string) => `${CSI}2m${s}${CSI}22m`,
-  cyan: (s: string) => `${CSI}36m${s}${CSI}39m`,
+  accent: (s: string) => `${CSI}38;2;43;201;124m${s}${CSI}39m`,
   bold: (s: string) => `${CSI}1m${s}${CSI}22m`,
-  boldCyan: (s: string) => `${CSI}1;36m${s}${CSI}22;39m`,
+  boldAccent: (s: string) => `${CSI}1;38;2;43;201;124m${s}${CSI}22;39m`,
   moveTo: (row: number, col: number) => `${CSI}${row};${col}H`,
 };
 
@@ -61,6 +64,7 @@ const OTHER_OPTION_DESCRIPTION = 'Optionally, add details in notes (tab).';
 
 interface AnswerState {
   selectedIdx: number | null;
+  selectedSet: Set<number>; // for multiSelect
   notes: string;
   committed: boolean;
   notesVisible: boolean;
@@ -79,6 +83,8 @@ class RequestUserInputOverlay {
   private answers: AnswerState[];
   private done = false;
   private cursorPos = 0; // cursor position within notes text
+  private inTypeIfSelected = false; // true when focus was auto-set to notes for typeIfSelected
+  private scrollOffset = 0; // first visible option index for scrollable lists
 
   constructor(questions: UserInputQuestion[]) {
     this.questions = questions;
@@ -86,12 +92,14 @@ class RequestUserInputOverlay {
       const hasOptions = !!(q.options && q.options.length > 0);
       return {
         selectedIdx: hasOptions ? 0 : null,
+        selectedSet: new Set(),
         notes: '',
         committed: false,
         notesVisible: !hasOptions,
       };
     });
     this.ensureFocusAvailable();
+    this.adjustFocusForTypeIfSelected();
   }
 
   // ── Accessors ──
@@ -108,16 +116,37 @@ class RequestUserInputOverlay {
     return !!(this.q?.options && this.q.options.length > 0);
   }
 
+  private get isMultiSelect(): boolean {
+    return !!(this.q?.multiSelect);
+  }
+
   private optionsLen(): number {
     const q = this.q;
     if (!q?.options) return 0;
     let len = q.options.length;
-    if (q.isOther) len++; // "None of the above"
+    if (q.isOther) len++;
+    if (q.multiSelect) len++; // submit button
     return len;
+  }
+
+  private get cursorOnSubmitButton(): boolean {
+    return this.isMultiSelect && this.ans?.selectedIdx === (this.q?.options?.length ?? 0);
+  }
+
+  /** Check if the currently selected option requires typing (typeIfSelected). */
+  private selectedOptionRequiresType(): boolean {
+    const q = this.q;
+    const a = this.ans;
+    if (!q?.options || a?.selectedIdx == null) return false;
+    if (a.selectedIdx < q.options.length) {
+      return q.options[a.selectedIdx].typeIfSelected === true;
+    }
+    return false;
   }
 
   private notesUIVisible(): boolean {
     if (!this.hasOptions) return true;
+    if (this.selectedOptionRequiresType()) return false; // inline, not separate area
     const a = this.ans;
     return !!(a && (a.notesVisible || a.notes.trim()));
   }
@@ -137,6 +166,29 @@ class RequestUserInputOverlay {
       return;
     }
     if (this.focus === 'notes' && !this.notesUIVisible()) {
+      this.focus = 'options';
+    }
+  }
+
+  /** Auto-focus notes when navigating to a typeIfSelected option, clear when leaving. */
+  private adjustFocusForTypeIfSelected(): void {
+    if (this.selectedOptionRequiresType()) {
+      this.focus = 'notes';
+      this.inTypeIfSelected = true;
+      const a = this.ans;
+      if (a) {
+        a.notesVisible = true;
+        this.cursorPos = a.notes.length;
+      }
+    } else if (this.inTypeIfSelected) {
+      this.inTypeIfSelected = false;
+      const a = this.ans;
+      if (a) {
+        a.notes = '';
+        a.notesVisible = false;
+        a.committed = false;
+      }
+      this.cursorPos = 0;
       this.focus = 'options';
     }
   }
@@ -204,27 +256,27 @@ class RequestUserInputOverlay {
     for (let idx = 0; idx < this.questions.length; idx++) {
       const question = this.questions[idx];
       const answer = this.answers[idx];
-      const options = question.options;
-      const selectedIdx =
-        options && options.length > 0 && answer.committed
-          ? answer.selectedIdx
-          : null;
-      const notes = answer.committed ? answer.notes.trim() : '';
-      const selectedLabel =
-        selectedIdx != null ? this.optionLabelForIndex.call({ q: question, ans: answer } as any, selectedIdx) : null;
+      const answerList: string[] = [];
 
-      // Rebuild label lookup without `this` context issue
-      let label: string | null = null;
-      if (selectedIdx != null && question.options) {
-        if (selectedIdx < question.options.length) {
-          label = question.options[selectedIdx].label;
-        } else if (selectedIdx === question.options.length && question.isOther) {
-          label = OTHER_OPTION_LABEL;
+      if (question.multiSelect && answer.committed && question.options) {
+        for (const si of Array.from(answer.selectedSet).sort((a, b) => a - b)) {
+          if (si < question.options.length) answerList.push(question.options[si].label);
+        }
+      } else {
+        const selectedIdx =
+          question.options && question.options.length > 0 && answer.committed
+            ? answer.selectedIdx
+            : null;
+        if (selectedIdx != null && question.options) {
+          if (selectedIdx < question.options.length) {
+            answerList.push(question.options[selectedIdx].label);
+          } else if (selectedIdx === question.options.length && question.isOther) {
+            answerList.push(OTHER_OPTION_LABEL);
+          }
         }
       }
 
-      const answerList: string[] = [];
-      if (label) answerList.push(label);
+      const notes = answer.committed ? answer.notes.trim() : '';
       if (notes) answerList.push(`user_note: ${notes}`);
 
       response.set(question.id, { answers: answerList });
@@ -251,6 +303,14 @@ class RequestUserInputOverlay {
     if (name === 'escape') {
       if (this.hasOptions && this.notesUIVisible()) {
         this.clearNotesAndFocusOptions();
+        return;
+      }
+      if (this.inTypeIfSelected) {
+        const a = this.ans;
+        if (a) { a.notes = ''; a.committed = false; }
+        this.cursorPos = 0;
+        this.inTypeIfSelected = false;
+        this.focus = 'options';
         return;
       }
       // Interrupt — cancel
@@ -292,16 +352,23 @@ class RequestUserInputOverlay {
         if (a.selectedIdx == null) a.selectedIdx = 0;
         else a.selectedIdx = (a.selectedIdx - 1 + optionsLen) % optionsLen;
         a.committed = false;
+        this.adjustFocusForTypeIfSelected();
         return;
       }
       case 'down': {
         if (a.selectedIdx == null) a.selectedIdx = 0;
         else a.selectedIdx = (a.selectedIdx + 1) % optionsLen;
         a.committed = false;
+        this.adjustFocusForTypeIfSelected();
         return;
       }
       case 'space': {
-        this.selectCurrentOption(true);
+        if (this.isMultiSelect && a.selectedIdx != null && !this.cursorOnSubmitButton) {
+          if (a.selectedSet.has(a.selectedIdx)) a.selectedSet.delete(a.selectedIdx);
+          else a.selectedSet.add(a.selectedIdx);
+        } else if (!this.isMultiSelect) {
+          this.selectCurrentOption(true);
+        }
         return;
       }
       case 'backspace':
@@ -318,6 +385,26 @@ class RequestUserInputOverlay {
         return;
       }
       case 'return': {
+        if (this.isMultiSelect) {
+          if (this.cursorOnSubmitButton && a.selectedSet.size > 0) {
+            a.committed = true;
+            this.goNextOrSubmit();
+          } else if (!this.cursorOnSubmitButton && a.selectedIdx != null) {
+            // Enter on an option toggles it
+            if (a.selectedSet.has(a.selectedIdx)) a.selectedSet.delete(a.selectedIdx);
+            else a.selectedSet.add(a.selectedIdx);
+          }
+          return;
+        }
+        // If the selected option has typeIfSelected, open notes instead of submitting
+        if (a.selectedIdx != null && this.selectedOptionRequiresType()) {
+          this.selectCurrentOption(true);
+          this.focus = 'notes';
+          this.inTypeIfSelected = true;
+          a.notesVisible = true;
+          this.cursorPos = a.notes.length;
+          return;
+        }
         if (a.selectedIdx != null) {
           this.selectCurrentOption(true);
         }
@@ -328,7 +415,25 @@ class RequestUserInputOverlay {
         // Digit selection (from Codex option_index_for_digit)
         const digit = parseInt(ch);
         if (digit >= 1 && digit <= optionsLen) {
+          if (this.isMultiSelect) {
+            const idx = digit - 1;
+            if (idx < (this.q?.options?.length ?? 0)) {
+              a.selectedIdx = idx;
+              if (a.selectedSet.has(idx)) a.selectedSet.delete(idx);
+              else a.selectedSet.add(idx);
+            }
+            return;
+          }
           a.selectedIdx = digit - 1;
+          // If typeIfSelected, open notes instead of submitting
+          if (this.selectedOptionRequiresType()) {
+            this.selectCurrentOption(true);
+            this.focus = 'notes';
+            this.inTypeIfSelected = true;
+            a.notesVisible = true;
+            this.cursorPos = a.notes.length;
+            return;
+          }
           this.selectCurrentOption(true);
           this.goNextOrSubmit();
           return;
@@ -353,13 +458,13 @@ class RequestUserInputOverlay {
     const notesEmpty = a.notes.trim() === '';
 
     // Tab: clear notes and focus options (from Codex)
-    if (this.hasOptions && name === 'tab') {
+    if (this.hasOptions && name === 'tab' && !this.inTypeIfSelected) {
       this.clearNotesAndFocusOptions();
       return;
     }
 
     // Backspace on empty notes: go back to options (from Codex)
-    if (this.hasOptions && name === 'backspace' && notesEmpty) {
+    if (this.hasOptions && name === 'backspace' && notesEmpty && !this.inTypeIfSelected) {
       a.notesVisible = false;
       this.focus = 'options';
       return;
@@ -387,12 +492,21 @@ class RequestUserInputOverlay {
         else a.selectedIdx = (a.selectedIdx + 1) % optionsLen;
       }
       a.committed = false;
+      this.adjustFocusForTypeIfSelected();
       return;
     }
 
     // Text editing
     if (name === 'backspace') {
-      if (this.cursorPos > 0) {
+      if (key.meta || ch === '\x1b\x7f') {
+        // Option+Backspace: delete previous word
+        let p = this.cursorPos;
+        while (p > 0 && a.notes[p - 1] === ' ') p--;
+        while (p > 0 && a.notes[p - 1] !== ' ') p--;
+        a.notes = a.notes.slice(0, p) + a.notes.slice(this.cursorPos);
+        this.cursorPos = p;
+        a.committed = false;
+      } else if (this.cursorPos > 0) {
         a.notes = a.notes.slice(0, this.cursorPos - 1) + a.notes.slice(this.cursorPos);
         this.cursorPos--;
         a.committed = false;
@@ -407,11 +521,27 @@ class RequestUserInputOverlay {
       return;
     }
     if (name === 'left') {
-      if (this.cursorPos > 0) this.cursorPos--;
+      if (key.meta) {
+        // Option+Left: jump to previous word boundary
+        let p = this.cursorPos;
+        while (p > 0 && a.notes[p - 1] === ' ') p--;
+        while (p > 0 && a.notes[p - 1] !== ' ') p--;
+        this.cursorPos = p;
+      } else {
+        if (this.cursorPos > 0) this.cursorPos--;
+      }
       return;
     }
     if (name === 'right') {
-      if (this.cursorPos < a.notes.length) this.cursorPos++;
+      if (key.meta) {
+        // Option+Right: jump to next word boundary
+        let p = this.cursorPos;
+        while (p < a.notes.length && a.notes[p] !== ' ') p++;
+        while (p < a.notes.length && a.notes[p] === ' ') p++;
+        this.cursorPos = p;
+      } else {
+        if (this.cursorPos < a.notes.length) this.cursorPos++;
+      }
       return;
     }
     if (name === 'home' || (key.ctrl && name === 'a')) {
@@ -420,6 +550,54 @@ class RequestUserInputOverlay {
     }
     if (name === 'end' || (key.ctrl && name === 'e')) {
       this.cursorPos = a.notes.length;
+      return;
+    }
+
+    // Emacs-style word motion (macOS Option+arrows emit ESC+b/f)
+    if (key.meta && name === 'b') {
+      let p = this.cursorPos;
+      while (p > 0 && a.notes[p - 1] === ' ') p--;
+      while (p > 0 && a.notes[p - 1] !== ' ') p--;
+      this.cursorPos = p;
+      return;
+    }
+    if (key.meta && name === 'f') {
+      let p = this.cursorPos;
+      while (p < a.notes.length && a.notes[p] !== ' ') p++;
+      while (p < a.notes.length && a.notes[p] === ' ') p++;
+      this.cursorPos = p;
+      return;
+    }
+    if (key.meta && name === 'd') {
+      // Option+Delete: delete next word
+      let p = this.cursorPos;
+      while (p < a.notes.length && a.notes[p] === ' ') p++;
+      while (p < a.notes.length && a.notes[p] !== ' ') p++;
+      a.notes = a.notes.slice(0, this.cursorPos) + a.notes.slice(p);
+      a.committed = false;
+      return;
+    }
+    if (key.ctrl && name === 'w') {
+      // Ctrl+W: delete previous word
+      let p = this.cursorPos;
+      while (p > 0 && a.notes[p - 1] === ' ') p--;
+      while (p > 0 && a.notes[p - 1] !== ' ') p--;
+      a.notes = a.notes.slice(0, p) + a.notes.slice(this.cursorPos);
+      this.cursorPos = p;
+      a.committed = false;
+      return;
+    }
+    if (key.ctrl && name === 'u') {
+      // Ctrl+U / Cmd+Backspace: delete to start of line
+      a.notes = a.notes.slice(this.cursorPos);
+      this.cursorPos = 0;
+      a.committed = false;
+      return;
+    }
+    if (key.ctrl && name === 'k') {
+      // Ctrl+K: delete to end of line
+      a.notes = a.notes.slice(0, this.cursorPos);
+      a.committed = false;
       return;
     }
 
@@ -435,7 +613,7 @@ class RequestUserInputOverlay {
 
   render(): void {
     const { rows } = process.stdout;
-    const { columns: width } = process.stdout;
+    const { columns } = process.stdout;
     const lines: string[] = [];
 
     // Progress header (from Codex: "Progress header keeps the user oriented")
@@ -450,12 +628,14 @@ class RequestUserInputOverlay {
     if (q) {
       const answered = this.ans?.committed ?? false;
       const header = q.header ? `${ansi.bold(q.header)}  ` : '';
-      const questionText = answered ? q.question : ansi.cyan(q.question);
+      const questionText = answered ? q.question : ansi.accent(q.question);
       lines.push('');
       lines.push(`${header}${questionText}`);
     }
 
-    // Options (from Codex option_rows)
+    // Options (from Codex option_rows) — scrollable when list exceeds terminal height
+    let inlineRow = -1;
+    let inlineCol = -1;
     if (this.hasOptions && q?.options) {
       lines.push('');
       const a = this.ans;
@@ -464,59 +644,124 @@ class RequestUserInputOverlay {
         allOptions.push({ label: OTHER_OPTION_LABEL, description: OTHER_OPTION_DESCRIPTION });
       }
 
-      for (let i = 0; i < allOptions.length; i++) {
+      // Calculate how many options fit: each takes 2 lines, reserve ~8 for header/question/notes/footer
+      const totalRows = rows ?? 24;
+      const reservedLines = 8;
+      const maxVisible = Math.max(2, Math.floor((totalRows - reservedLines) / 2));
+      const needsScroll = allOptions.length > maxVisible;
+
+      // Adjust scroll offset to keep selected option visible
+      const sel = a?.selectedIdx ?? 0;
+      if (sel < this.scrollOffset) this.scrollOffset = sel;
+      if (sel >= this.scrollOffset + maxVisible) this.scrollOffset = sel - maxVisible + 1;
+      this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, allOptions.length - maxVisible));
+
+      const visibleStart = needsScroll ? this.scrollOffset : 0;
+      const visibleEnd = needsScroll ? Math.min(visibleStart + maxVisible, allOptions.length) : allOptions.length;
+
+      if (needsScroll && visibleStart > 0) {
+        lines.push(ansi.dim(`    ↑ ${visibleStart} more`));
+      }
+
+      for (let i = visibleStart; i < visibleEnd; i++) {
         const opt = allOptions[i];
-        const selected = a?.selectedIdx === i;
-        const prefix = selected ? ansi.boldCyan('›') : ' ';
-        const number = `${i + 1}.`;
-        const label = selected ? ansi.boldCyan(opt.label) : opt.label;
+        const atCursor = a?.selectedIdx === i;
+        const checked = q.multiSelect && a?.selectedSet.has(i);
+        const prefix = atCursor ? ansi.boldAccent('›') : ' ';
+        const checkbox = q.multiSelect ? (checked ? ansi.boldAccent('[x]') : ansi.dim('[ ]')) + ' ' : '';
+        const number = q.multiSelect ? '' : `${i + 1}. `;
+        const label = atCursor ? ansi.boldAccent(opt.label) : opt.label;
         const desc = ansi.dim(opt.description);
-        lines.push(`  ${prefix} ${number} ${label}`);
+
+        let optionLine = `  ${prefix} ${checkbox}${number}${label}`;
+
+        // Inline text field for typeIfSelected options
+        if (opt.typeIfSelected) {
+          const isEditing = atCursor && this.focus === 'notes';
+          const notes = (atCursor ? a?.notes : '') ?? '';
+          if (isEditing) {
+            optionLine += ansi.dim(':') + ' ' + notes;
+            inlineRow = lines.length + 1; // 1-indexed row (line will be pushed next)
+            inlineCol = 2 + 1 + 1 + number.length + 1 + opt.label.length + 2 + this.cursorPos + 1;
+          } else {
+            optionLine += ansi.dim(': type here');
+          }
+        }
+
+        lines.push(optionLine);
         lines.push(`       ${desc}`);
+      }
+
+      if (needsScroll && visibleEnd < allOptions.length) {
+        lines.push(ansi.dim(`    ↓ ${allOptions.length - visibleEnd} more`));
+      }
+
+      // Submit button for multiSelect
+      if (q.multiSelect) {
+        lines.push('');
+        const onButton = this.cursorOnSubmitButton;
+        const count = a?.selectedSet.size ?? 0;
+        const label = count > 0 ? `Submit (${count})` : 'Submit';
+        const buttonLine = onButton ? `  ${ansi.boldAccent('›')} ${ansi.boldAccent(label)}` : `    ${ansi.dim(label)}`;
+        lines.push(buttonLine);
       }
     }
 
     // Notes area (from Codex: notes always available, rendered via composer)
+    let notesViewOffset = 0;
     if (this.notesUIVisible()) {
       lines.push('');
       const a = this.ans;
       const notes = a?.notes ?? '';
       const placeholder = this.notesPlaceholder();
       const focusedOnNotes = this.focus === 'notes';
+      const prefix = focusedOnNotes ? '> ' : '  ';
+      const maxWidth = (columns ?? 80) - prefix.length - 1;
 
       if (notes || focusedOnNotes) {
-        const label = focusedOnNotes ? ansi.cyan('> ') : '  ';
-        const display = notes || ansi.dim(placeholder);
-        lines.push(`${label}${display}`);
+        const label = focusedOnNotes ? ansi.accent(prefix) : prefix;
+        if (notes.length <= maxWidth) {
+          lines.push(`${label}${notes || ansi.dim(placeholder)}`);
+        } else {
+          // Scroll window to keep cursor visible
+          notesViewOffset = Math.max(0, this.cursorPos - maxWidth + 1);
+          const visible = notes.slice(notesViewOffset, notesViewOffset + maxWidth);
+          lines.push(`${label}${visible}`);
+        }
       } else {
         lines.push(`  ${ansi.dim(placeholder)}`);
       }
     }
 
-    // Footer hints (from Codex footer_tips)
+    // Footer hints
     lines.push('');
     const tips: string[] = [];
-    if (this.hasOptions) {
-      if (this.ans?.selectedIdx != null && !this.notesUIVisible()) {
-        tips.push(ansi.boldCyan('tab to add notes'));
-      }
-      if (this.ans?.selectedIdx != null && this.notesUIVisible()) {
-        tips.push('tab or esc to clear notes');
-      }
-    }
-    const isLast = this.currentIdx + 1 >= this.questions.length;
-    if (this.questions.length === 1) {
-      tips.push(ansi.boldCyan('enter to submit'));
-    } else if (isLast) {
-      tips.push(ansi.boldCyan('enter to submit all'));
-    } else {
-      tips.push('enter to submit answer');
-    }
-    if (this.questions.length > 1 && this.hasOptions && this.focus === 'options') {
-      tips.push('←/→ to navigate questions');
-    }
-    if (!(this.hasOptions && this.notesUIVisible())) {
+    if (this.isMultiSelect) {
+      tips.push('enter/space to toggle');
       tips.push('esc to cancel');
+    } else {
+      if (this.hasOptions) {
+        if (this.ans?.selectedIdx != null && !this.notesUIVisible() && !this.selectedOptionRequiresType()) {
+          tips.push(ansi.boldAccent('tab to add notes'));
+        }
+        if (this.ans?.selectedIdx != null && this.notesUIVisible()) {
+          tips.push('tab or esc to clear notes');
+        }
+      }
+      const isLast = this.currentIdx + 1 >= this.questions.length;
+      if (this.questions.length === 1) {
+        tips.push(ansi.boldAccent('enter to submit'));
+      } else if (isLast) {
+        tips.push(ansi.boldAccent('enter to submit all'));
+      } else {
+        tips.push('enter to submit answer');
+      }
+      if (this.questions.length > 1 && this.hasOptions && this.focus === 'options') {
+        tips.push('←/→ to navigate questions');
+      }
+      if (!(this.hasOptions && this.notesUIVisible())) {
+        tips.push('esc to cancel');
+      }
     }
     lines.push(ansi.dim(tips.join(' | ')));
 
@@ -532,10 +777,11 @@ class RequestUserInputOverlay {
     }
 
     // Show cursor positioned in notes if focused there
-    if (this.focus === 'notes' && this.notesUIVisible()) {
-      const notesLineIdx = lines.findIndex((_, i) =>
-        i > 0 && (lines[i].includes('> ') || lines[i].startsWith('  ' + ansi.dim(this.notesPlaceholder())))
-      );
+    if (this.focus === 'notes' && inlineRow > 0) {
+      // Inline typeIfSelected text field cursor
+      write(ansi.showCursor);
+      write(`${CSI}${inlineRow};${inlineCol}H`);
+    } else if (this.focus === 'notes' && this.notesUIVisible()) {
       // Find the notes line more precisely
       let notesRow = lines.length - 2; // default near bottom
       for (let i = 0; i < lines.length; i++) {
@@ -545,7 +791,7 @@ class RequestUserInputOverlay {
           break;
         }
       }
-      const col = 3 + this.cursorPos; // "  " prefix + cursor position
+      const col = 3 + this.cursorPos - notesViewOffset; // prefix + cursor position adjusted for scroll
       write(ansi.showCursor);
       write(`${CSI}${notesRow + 1};${col}H`);
     } else {

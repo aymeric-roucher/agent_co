@@ -1,23 +1,52 @@
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { readFileSync, appendFileSync, existsSync } from 'fs';
+import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'fs';
+import { spawnSync, execSync } from 'child_process';
 import path from 'path';
-import { saveConfig, ensureDepartmentDirs, type DepartmentConfig } from './config.js';
+import { saveConfig, ensureDepartmentDirs, DEFAULT_MODEL, COMPANY_DIR, type DepartmentConfig } from './config.js';
 import { requestUserInput, type UserInputQuestion } from './tui/user-input.js';
 
-const DepartmentSchema = z.object({
+const ACCENT = '\x1b[38;2;43;201;124m';
+const RESET = '\x1b[39m';
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+function startSpinner(msg: string): () => void {
+  let i = 0;
+  const id = setInterval(() => {
+    process.stdout.write(`\r${ACCENT}${SPINNER_FRAMES[i++ % SPINNER_FRAMES.length]}${RESET} ${msg}`);
+  }, 80);
+  return () => { clearInterval(id); process.stdout.write('\r\x1b[2K'); };
+}
+
+const VPDescriptionSchema = z.object({
   slug: z.string(),
   name: z.string(),
-  responsibility: z.string(),
+  description: z.string(),
 });
 
 const ProposalSchema = z.object({
-  options: z.array(z.object({
-    label: z.string(),
-    departments: z.array(DepartmentSchema),
-  })).min(2).max(4),
+  departments: z.array(VPDescriptionSchema).min(2).max(10),
 });
+
+/** Walk up from cwd to find the user's coding agent instructions file. */
+function findAgentInstructionsPath(workerType: 'claude_code' | 'codex'): string | null {
+  const candidates = workerType === 'claude_code'
+    ? ['CLAUDE.md', '.claude/CLAUDE.md']
+    : ['AGENT.md'];
+  const home = process.env.HOME ?? '/';
+  let dir = process.cwd();
+  while (true) {
+    for (const candidate of candidates) {
+      const p = path.join(dir, candidate);
+      if (existsSync(p)) return p;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir || dir === home) break;
+    dir = parent;
+  }
+  return null;
+}
 
 function addCompanyToGitignore(): void {
   const gitignorePath = path.join(process.cwd(), '.gitignore');
@@ -63,19 +92,18 @@ export async function runSecretary(): Promise<void> {
       question: 'Add company/ to .gitignore?',
       options: [
         { label: 'Yes (Recommended)', description: 'Prevents runtime data from being committed.' },
+        { label: 'No', description: 'Closes setup.' },
       ],
-      isOther: true,
     },
   ]);
 
+  if (setupResponse.size === 0) process.exit(0);
   const workerTypeAnswer = getAnswer(setupResponse, 'worker_type');
   const workerType = workerTypeAnswer.selected?.includes('Codex') ? 'codex' as const : 'claude_code' as const;
 
   const gitignoreAnswer = getAnswer(setupResponse, 'gitignore');
+  if (gitignoreAnswer.selected?.includes('No')) process.exit(0);
   const addGitignoreFlag = gitignoreAnswer.selected?.includes('Yes') ?? false;
-  if (!addGitignoreFlag && gitignoreAnswer.notes) {
-    console.log(`  Skipping .gitignore (${gitignoreAnswer.notes})`);
-  }
 
   // ── Step 2: Areas — freeform question ──
 
@@ -88,150 +116,105 @@ export async function runSecretary(): Promise<void> {
     },
   ]);
 
+  if (areasResponse.size === 0) process.exit(0);
   let description = getAnswer(areasResponse, 'areas').notes;
   if (!description) {
     console.log('\nNo areas described. Setup cancelled.');
-    return;
+    process.exit(0);
   }
 
-  // ── Step 3: LLM proposes department lists; user picks or refines ──
+  // ── Step 3: LLM proposes departments; user multiselects ──
 
-  let departments: DepartmentConfig[] = [];
-
-  while (true) {
-    console.log('\nGenerating proposals...');
-    const { object } = await generateObject({
-      model: openai('gpt-4o'),
-      schema: ProposalSchema,
-      prompt: `Propose 2-3 different department configurations for an engineering team.
-Each option is a complete list of departments. Vary the granularity (e.g. one option with fewer broad depts, another with more focused ones).
-Each department needs: kebab-case slug, short name, broad ongoing responsibility (NOT a one-off task).
+  const stopSpinner = startSpinner('Generating departments...');
+  const { object } = await generateObject({
+    model: openai(DEFAULT_MODEL),
+    schema: ProposalSchema,
+    prompt: `Propose a set of VP departments for an engineering team (up to 10).
+Each VP needs: kebab-case slug, short name, and a description written in imperative second person addressed to the agent (e.g. "You own the full test suite. You ensure coverage stays above 90%." — NOT third person like "Manages testing").
+The description should be a broad ongoing mandate (NOT a one-off task).
+IMPORTANT: Use names and wording as close as possible to what the user wrote, unless you have a significantly clearer alternative.
+NEVER use the word "agent" or "vp" in names or slugs — we already know they are agents and VPs. Use more department names (ofc no "department" either)
 
 User description: ${description}`,
-    });
+  });
+  stopSpinner();
 
-    // Build options from LLM proposals
-    const options = object.options.map(opt => ({
-      label: opt.label,
-      description: opt.departments.map(d => `${d.name} (${d.slug})`).join(', '),
-    }));
+  const pickResponse = await requestUserInput([
+    {
+      id: 'pick',
+      header: 'Departments',
+      question: 'Select the departments you want to create.',
+      multiSelect: true,
+      options: object.departments.map(d => ({
+        label: d.slug,
+        description: `${d.name} — ${d.description}`,
+      })),
+    },
+  ]);
 
-    // Show full details before the selection UI
-    for (const [i, opt] of object.options.entries()) {
-      console.log(`\n  [${i + 1}] ${opt.label}`);
-      for (const d of opt.departments) {
-        console.log(`      ${d.name} (${d.slug}) — ${d.responsibility}`);
-      }
-    }
+  if (pickResponse.size === 0) process.exit(0);
+  const picked = pickResponse.get('pick');
+  const selectedSlugs = new Set(picked?.answers ?? []);
+  const departments = object.departments.filter(d => selectedSlugs.has(d.slug));
 
-    const pickResponse = await requestUserInput([
-      {
-        id: 'pick',
-        header: 'Configuration',
-        question: 'Pick a department configuration, or type something to refine.',
-        isOther: true,
-        options,
-      },
-    ]);
+  // ── Step 4: Save ──
 
-    const pick = getAnswer(pickResponse, 'pick');
-
-    // If user typed something (notes), use that as new description
-    if (pick.selected === 'None of the above' || (!pick.selected && pick.notes)) {
-      description = pick.notes || description;
-      continue;
-    }
-
-    // Find which option was selected
-    const selectedIdx = options.findIndex(o => o.label === pick.selected);
-    if (selectedIdx >= 0) {
-      departments = object.options[selectedIdx].departments;
-      break;
-    }
-
-    // Fallback: if notes provided, refine
-    if (pick.notes) {
-      description = pick.notes;
-      continue;
-    }
-
-    // Default to first option
-    departments = object.options[0].departments;
-    break;
-  }
-
-  // ── Step 4: Confirm each department ──
-
-  const accepted: DepartmentConfig[] = [];
-  const edits: { original: DepartmentConfig; feedback: string }[] = [];
-
-  for (const dept of departments) {
-    const confirmResponse = await requestUserInput([
-      {
-        id: 'confirm',
-        header: dept.name,
-        question: `${dept.name} (${dept.slug}) — ${dept.responsibility}`,
-        isOther: true,
-        options: [
-          { label: 'Accept (Recommended)', description: 'Include this department.' },
-          { label: 'Reject', description: 'Skip this department.' },
-        ],
-      },
-    ]);
-
-    const answer = getAnswer(confirmResponse, 'confirm');
-    if (answer.selected?.includes('Accept')) {
-      accepted.push(dept);
-    } else if (answer.selected?.includes('Reject')) {
-      // skip
-    } else if (answer.notes) {
-      edits.push({ original: dept, feedback: answer.notes });
-    }
-  }
-
-  // ── Step 5: If any feedback, one LLM call to refine ──
-
-  if (edits.length > 0) {
-    const editPrompt = edits
-      .map(e => `"${e.original.name}" (${e.original.slug}): ${e.original.responsibility}\nFeedback: ${e.feedback}`)
-      .join('\n\n');
-
-    console.log('\nRefining based on feedback...');
-    const { object } = await generateObject({
-      model: openai('gpt-4o'),
-      schema: z.object({ departments: z.array(DepartmentSchema) }),
-      prompt: `Refine these departments based on user feedback:\n\n${editPrompt}`,
-    });
-
-    for (const refined of object.departments) {
-      const refineResponse = await requestUserInput([
-        {
-          id: 'confirm',
-          header: refined.name,
-          question: `${refined.name} (${refined.slug}) — ${refined.responsibility}`,
-          options: [
-            { label: 'Accept (Recommended)', description: 'Include this department.' },
-            { label: 'Reject', description: 'Skip this department.' },
-          ],
-        },
-      ]);
-      const answer = getAnswer(refineResponse, 'confirm');
-      if (answer.selected?.includes('Accept')) accepted.push(refined);
-    }
-  }
-
-  // ── Step 6: Save ──
-
-  if (accepted.length === 0) {
+  if (departments.length === 0) {
     console.log('\nNo departments created.');
-    return;
+    process.exit(0);
   }
 
-  const config = { repo: process.cwd(), worker_type: workerType, departments: accepted };
+  const config = { repo: process.cwd(), worker_type: workerType, departments };
   saveConfig(config);
   ensureDepartmentDirs(config);
   if (addGitignoreFlag) addCompanyToGitignore();
 
-  console.log(`\nSetup complete! ${accepted.length} departments created.`);
-  console.log('Start a VP with: vp start <slug>');
+  // Write agent instructions file per department
+  for (const dept of departments) {
+    const deptDir = path.join(COMPANY_DIR, 'workspaces', dept.slug);
+    const agentMd = [
+      `# Your department: ${dept.name}`,
+      '',
+      `You are a rigorous VP in charge of the ${dept.name} department.`,
+      '',
+      dept.description,
+      '',
+      '## How work progresses',
+      '',
+      '1. You receive tasks from the event queue or decide on work based on your mandate.',
+      '2. You spawn workers on dedicated branches — one focused task per worker.',
+      '3. When a worker finishes, you review its output. Kill and replace underperformers.',
+      '4. You persist learnings into DOC.md and progress into WORK.md.',
+      '5. When work is ready and tested, you open a PR.',
+    ].join('\n');
+    writeFileSync(path.join(deptDir, 'AGENT.md'), agentMd + '\n');
+  }
+
+  // ── Step 5: Worker authentication (runs before summary so its output doesn't erase it) ──
+
+  const bin = workerType === 'claude_code' ? 'claude' : 'codex';
+  try {
+    execSync(`which ${bin}`, { stdio: 'pipe' });
+    const authCmd = workerType === 'claude_code' ? 'claude setup-token' : 'codex auth';
+    console.log(`\nRunning "${authCmd}" to authenticate...`);
+    spawnSync(authCmd.split(' ')[0], authCmd.split(' ').slice(1), { stdio: 'inherit' });
+  } catch {
+    console.log(`\nWarning: "${bin}" not found in PATH. Install it before running VPs.`);
+  }
+
+  // ── Summary (printed last so it stays visible) ──
+
+  console.log(`\n${ACCENT}Setup complete!${RESET} ${departments.length} departments created:\n`);
+  for (const dept of departments) {
+    console.log(`  ${ACCENT}●${RESET} ${dept.name}  ${'\x1b[2m'}vp start ${dept.slug}${'\x1b[22m'}`);
+  }
+
+  const instructionsPath = findAgentInstructionsPath(workerType);
+  if (instructionsPath) {
+    console.log(`\nDetected coding agent instructions at ${ACCENT}${instructionsPath}${RESET}`);
+    console.log('These will be used by workers automatically.');
+  }
+
+  console.log(`\nExplore ${ACCENT}company/${RESET} to see configs, agent instructions, and logs.\n`);
+  process.exit(0);
 }

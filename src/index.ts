@@ -36,7 +36,7 @@ program
   .action(() => {
     const config = loadConfig();
     for (const dept of config.departments) {
-      console.log(`  ${dept.slug} | ${dept.name} | ${dept.responsibility.slice(0, 60)}`);
+      console.log(`  ${dept.slug} | ${dept.name} | ${dept.description.slice(0, 60)}`);
     }
   });
 
@@ -46,7 +46,7 @@ program
   .action(() => {
     const config = loadConfig();
     for (const dept of config.departments) {
-      const workPath = path.join('company', 'departments', dept.slug, 'WORK.md');
+      const workPath = path.join('company', 'workspaces', dept.slug, 'WORK.md');
       const hasWork = existsSync(workPath);
       const eventsPath = path.join('company', 'logs', dept.slug, 'events.jsonl');
       let lastEvent = '(no events)';

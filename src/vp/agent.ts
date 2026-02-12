@@ -22,14 +22,16 @@ export interface VPState {
 }
 
 function bootstrapWorkerInstructions(state: VPState): string {
+  const agentMdPath = path.join(state.departmentDir, 'AGENT.md');
+  const agentInstructions = existsSync(agentMdPath) ? readFileSync(agentMdPath, 'utf-8') : '';
+
   const commonDocPath = path.join(state.companyDir, 'DOC_COMMON.md');
   const deptDocPath = path.join(state.departmentDir, 'DOC.md');
   const commonDoc = existsSync(commonDocPath) ? readFileSync(commonDocPath, 'utf-8') : '';
   const deptDoc = existsSync(deptDocPath) ? readFileSync(deptDocPath, 'utf-8') : '';
 
   return [
-    '# Worker Instructions',
-    '',
+    agentInstructions,
     commonDoc ? `## Shared Knowledge\n${commonDoc}` : '',
     deptDoc ? `## Department Knowledge\n${deptDoc}` : '',
     '',

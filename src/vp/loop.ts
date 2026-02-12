@@ -2,7 +2,7 @@ import { generateText, stepCountIs } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
-import { COMPANY_DIR, type DepartmentConfig, type CompanyConfig } from '../config.js';
+import { COMPANY_DIR, DEFAULT_MODEL, type DepartmentConfig, type CompanyConfig } from '../config.js';
 import { Tracker } from '../tracker.js';
 import { EventQueue } from '../event-queue.js';
 import type { WorkerEvent, WorkerHandle } from '../workers/types.js';
@@ -23,7 +23,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
   const logsBase = path.join(COMPANY_DIR, 'logs');
   const tracker = new Tracker(department.slug, logsBase);
   const eventQueue = new EventQueue<WorkerEvent>();
-  const departmentDir = path.join(COMPANY_DIR, 'departments', department.slug);
+  const departmentDir = path.join(COMPANY_DIR, 'workspaces', department.slug);
 
   const state: VPState = {
     config: department,
@@ -45,7 +45,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
   const commonDoc = readFileOrEmpty(path.join(COMPANY_DIR, 'DOC_COMMON.md'));
 
   const initialContext = [
-    `Your responsibility: ${department.responsibility}`,
+    `Your description: ${department.description}`,
     `Worker type: ${companyConfig.worker_type}`,
     `Repo: ${companyConfig.repo}`,
     vpLogs ? `\n## Previous progress (VP_LOGS.md):\n${vpLogs}` : '',
@@ -58,11 +58,11 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
   ];
 
   tracker.logEvent('vp_started', { department: department.slug, totalTokens: 0 });
-  console.log(`[VP:${department.slug}] Started. Responsibility: ${department.responsibility}`);
+  console.log(`[VP:${department.slug}] Started. Description: ${department.description}`);
 
   while (true) {
     const result = await generateText({
-      model: openai('gpt-4o'),
+      model: openai(DEFAULT_MODEL),
       system: buildVPPrompt(department, companyConfig),
       tools,
       messages,
@@ -90,7 +90,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
       });
 
       await generateText({
-        model: openai('gpt-4o'),
+        model: openai(DEFAULT_MODEL),
         system: buildVPPrompt(department, companyConfig),
         tools,
         messages,

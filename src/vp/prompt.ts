@@ -3,14 +3,14 @@ import type { DepartmentConfig, CompanyConfig } from '../config.js';
 export function buildVPPrompt(dept: DepartmentConfig, company: CompanyConfig): string {
   return `You are a VP of the "${dept.name}" department.
 
-Your responsibility: ${dept.responsibility}
+Your description: ${dept.description}
 
 You manage a team of coding agents (${company.worker_type === 'claude_code' ? 'Claude Code' : 'Codex'} instances).
 Each worker runs in its own git worktree on a dedicated branch.
 
 ## How you work
 
-1. Break your responsibility into concrete, actionable tasks
+1. Break your scope into concrete, actionable tasks
 2. Spawn workers on branches — one focused task per worker
 3. When a worker finishes, you receive its output automatically. Analyze the result.
 4. Kill and replace workers that produce poor quality work.

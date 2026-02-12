@@ -9,8 +9,8 @@ const validConfig: CompanyConfig = {
   repo: '/tmp/test-repo',
   worker_type: 'claude_code',
   departments: [
-    { slug: 'code-quality', name: 'Code Quality', responsibility: 'Keep code clean' },
-    { slug: 'ui', name: 'UI Fidelity', responsibility: 'Match designs' },
+    { slug: 'code-quality', name: 'Code Quality', description: 'Keep code clean' },
+    { slug: 'ui', name: 'UI Fidelity', description: 'Match designs' },
   ],
 };
 
@@ -33,7 +33,7 @@ describe('config', () => {
 
   it('throws on invalid worker_type', () => {
     const configPath = path.join(TMP, 'bad2.yaml');
-    writeFileSync(configPath, 'repo: /tmp\nworker_type: invalid\ndepartments:\n  - slug: x\n    name: X\n    responsibility: y\n');
+    writeFileSync(configPath, 'repo: /tmp\nworker_type: invalid\ndepartments:\n  - slug: x\n    name: X\n    description: y\n');
     expect(() => loadConfig(configPath)).toThrow();
   });
 

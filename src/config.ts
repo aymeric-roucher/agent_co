@@ -6,7 +6,7 @@ import path from 'path';
 const DepartmentSchema = z.object({
   slug: z.string(),
   name: z.string(),
-  responsibility: z.string(),
+  description: z.string(),
 });
 
 const CompanyConfigSchema = z.object({
@@ -18,6 +18,7 @@ const CompanyConfigSchema = z.object({
 export type DepartmentConfig = z.infer<typeof DepartmentSchema>;
 export type CompanyConfig = z.infer<typeof CompanyConfigSchema>;
 
+export const DEFAULT_MODEL = 'gpt-5.2';
 export const COMPANY_DIR = 'company';
 export const CONFIG_PATH = path.join(COMPANY_DIR, 'config.yaml');
 
@@ -33,7 +34,7 @@ export function saveConfig(config: CompanyConfig, configPath = CONFIG_PATH): voi
 
 export function ensureDepartmentDirs(config: CompanyConfig): void {
   for (const dept of config.departments) {
-    const deptDir = path.join(COMPANY_DIR, 'departments', dept.slug);
+    const deptDir = path.join(COMPANY_DIR, 'workspaces', dept.slug);
     mkdirSync(path.join(deptDir, 'plans'), { recursive: true });
     mkdirSync(path.join(deptDir, 'prds'), { recursive: true });
     const logsDir = path.join(COMPANY_DIR, 'logs', dept.slug, 'work-snapshots');
