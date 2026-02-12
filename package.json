@@ -1,0 +1,27 @@
+{
+  "name": "agents-co",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "vp": "./bin/vp"
+  },
+  "scripts": {
+    "start": "node --env-file=.env --import=tsx/esm src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.28",
+    "@inquirer/prompts": "^8.2.0",
+    "ai": "^6.0.84",
+    "commander": "^13",
+    "yaml": "^2.7",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.19",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}
