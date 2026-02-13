@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #0f172a;
+        --muted: #475569;
+        --card: #ffffff;
+        --accent: #0ea5e9;
+        --bg-start: #f8fafc;
+        --bg-end: #e2e8f0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(circle at top, var(--bg-start), var(--bg-end));
+        min-height: 100vh;
+      }
+
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 28px;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: clamp(28px, 3vw, 38px);
+        letter-spacing: -0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: 18px;
+        padding: 20px 22px 18px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+        display: grid;
+        gap: 16px;
+      }
+
+      .card header {
+        margin: 0;
+        gap: 4px;
+      }
+
+      .city {
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .country {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .temp {
+        font-size: 42px;
+        font-weight: 700;
+      }
+
+      .condition {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      .details {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px 16px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .details span {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      footer {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Weather Dashboard</h1>
+        <p>Notional conditions across five cities right now.</p>
+      </header>
+
+      <section class="grid" id="weather-grid"></section>
+
+      <footer>Data shown is illustrative.</footer>
+    </div>
+
+    <script>
+      const cities = [
+        {
+          name: "Paris",
+          country: "France",
+          temp: 18,
+          condition: "Cloudy",
+          humidity: 62,
+          wind: 14,
+        },
+        {
+          name: "Tokyo",
+          country: "Japan",
+          temp: 24,
+          condition: "Sunny",
+          humidity: 54,
+          wind: 10,
+        },
+        {
+          name: "New York",
+          country: "USA",
+          temp: 16,
+          condition: "Rainy",
+          humidity: 71,
+          wind: 22,
+        },
+        {
+          name: "Sydney",
+          country: "Australia",
+          temp: 27,
+          condition: "Sunny",
+          humidity: 46,
+          wind: 18,
+        },
+        {
+          name: "Nairobi",
+          country: "Kenya",
+          temp: 21,
+          condition: "Cloudy",
+          humidity: 58,
+          wind: 12,
+        },
+      ];
+
+      const grid = document.getElementById("weather-grid");
+
+      for (const city of cities) {
+        const card = document.createElement("article");
+        card.className = "card";
+        card.innerHTML = `
+          <header>
+            <div class="city">${city.name}</div>
+            <div class="country">${city.country}</div>
+          </header>
+          <div>
+            <div class="temp">${city.temp}°C</div>
+            <div class="condition">${city.condition}</div>
+          </div>
+          <div class="details">
+            <div>Humidity <span>${city.humidity}%</span></div>
+            <div>Wind <span>${city.wind} km/h</span></div>
+          </div>
+        `;
+        grid.appendChild(card);
+      }
+    </script>
+  </body>
+</html>
