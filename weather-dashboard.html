@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0f1b2a;
+        --surface: #14243a;
+        --surface-2: #1a2c45;
+        --text: #eef3ff;
+        --muted: #b6c2e2;
+        --accent: #6fd3ff;
+        --sunny: #ffd166;
+        --cloudy: #90a4c7;
+        --rainy: #7fb2ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Manrope", "Segoe UI", system-ui, sans-serif;
+        background: radial-gradient(circle at top, #1b3557, var(--bg));
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: start center;
+        padding: 32px 16px 48px;
+      }
+
+      .dashboard {
+        width: min(1100px, 100%);
+        display: grid;
+        gap: 24px;
+      }
+
+      header {
+        display: grid;
+        gap: 8px;
+      }
+
+      h1 {
+        font-size: clamp(1.6rem, 2vw + 1rem, 2.6rem);
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .card {
+        background: linear-gradient(160deg, var(--surface), var(--surface-2));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        padding: 18px;
+        display: grid;
+        gap: 14px;
+        box-shadow: 0 12px 24px rgba(6, 14, 32, 0.35);
+      }
+
+      .card header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .city {
+        font-size: 1.2rem;
+        font-weight: 600;
+      }
+
+      .temp {
+        font-size: 2.4rem;
+        font-weight: 600;
+      }
+
+      .condition {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .dot.sunny {
+        background: var(--sunny);
+      }
+
+      .dot.cloudy {
+        background: var(--cloudy);
+      }
+
+      .dot.rainy {
+        background: var(--rainy);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        font-size: 0.95rem;
+      }
+
+      .stats div {
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .label {
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      @media (max-width: 600px) {
+        body {
+          padding: 24px 12px 32px;
+        }
+
+        .stats {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="dashboard" aria-label="Weather dashboard">
+      <header>
+        <h1>Global Weather Snapshot</h1>
+        <p>Sample data for five cities around the world.</p>
+      </header>
+
+      <section class="grid" aria-label="City forecasts">
+        <article class="card" aria-labelledby="paris">
+          <header>
+            <div class="city" id="paris">Paris</div>
+            <div class="temp">18°C</div>
+          </header>
+          <div class="condition">
+            <span class="dot cloudy" aria-hidden="true"></span>
+            Cloudy
+          </div>
+          <div class="stats">
+            <div>
+              <span class="label">Humidity</span>
+              <span>62%</span>
+            </div>
+            <div>
+              <span class="label">Wind</span>
+              <span>12 km/h</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" aria-labelledby="tokyo">
+          <header>
+            <div class="city" id="tokyo">Tokyo</div>
+            <div class="temp">24°C</div>
+          </header>
+          <div class="condition">
+            <span class="dot sunny" aria-hidden="true"></span>
+            Sunny
+          </div>
+          <div class="stats">
+            <div>
+              <span class="label">Humidity</span>
+              <span>55%</span>
+            </div>
+            <div>
+              <span class="label">Wind</span>
+              <span>9 km/h</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" aria-labelledby="new-york">
+          <header>
+            <div class="city" id="new-york">New York</div>
+            <div class="temp">6°C</div>
+          </header>
+          <div class="condition">
+            <span class="dot rainy" aria-hidden="true"></span>
+            Rainy
+          </div>
+          <div class="stats">
+            <div>
+              <span class="label">Humidity</span>
+              <span>78%</span>
+            </div>
+            <div>
+              <span class="label">Wind</span>
+              <span>22 km/h</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" aria-labelledby="sydney">
+          <header>
+            <div class="city" id="sydney">Sydney</div>
+            <div class="temp">27°C</div>
+          </header>
+          <div class="condition">
+            <span class="dot sunny" aria-hidden="true"></span>
+            Sunny
+          </div>
+          <div class="stats">
+            <div>
+              <span class="label">Humidity</span>
+              <span>48%</span>
+            </div>
+            <div>
+              <span class="label">Wind</span>
+              <span>16 km/h</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" aria-labelledby="nairobi">
+          <header>
+            <div class="city" id="nairobi">Nairobi</div>
+            <div class="temp">21°C</div>
+          </header>
+          <div class="condition">
+            <span class="dot cloudy" aria-hidden="true"></span>
+            Cloudy
+          </div>
+          <div class="stats">
+            <div>
+              <span class="label">Humidity</span>
+              <span>64%</span>
+            </div>
+            <div>
+              <span class="label">Wind</span>
+              <span>14 km/h</span>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
