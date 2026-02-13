@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f4ef;
+        --ink: #1b1f2a;
+        --muted: #5b6375;
+        --accent: #0f5b6d;
+        --accent-soft: #d7eef2;
+        --card: #ffffff;
+        --sunny: #f6b042;
+        --cloudy: #8aa0b8;
+        --rainy: #3a6ea5;
+        --shadow: 0 20px 45px rgba(15, 32, 53, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #ffffff 0%, #f8f1e8 38%, #eef4f8 100%);
+        color: var(--ink);
+        min-height: 100vh;
+      }
+
+      .page {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+        display: grid;
+        gap: 28px;
+      }
+
+      header {
+        display: grid;
+        gap: 10px;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+
+      .subhead {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+
+      .badge {
+        background: var(--accent-soft);
+        color: var(--accent);
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.85rem;
+      }
+
+      .grid {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: var(--shadow);
+        display: grid;
+        gap: 16px;
+        border: 1px solid rgba(15, 32, 53, 0.08);
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 1.3rem;
+      }
+
+      .temp {
+        font-size: 2.2rem;
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .conditions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .dot.sunny {
+        background: var(--sunny);
+      }
+
+      .dot.cloudy {
+        background: var(--cloudy);
+      }
+
+      .dot.rainy {
+        background: var(--rainy);
+      }
+
+      .details {
+        display: grid;
+        gap: 8px;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .detail-row span {
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      footer {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          padding: 24px 16px 36px;
+        }
+
+        .card {
+          padding: 18px;
+        }
+
+        .temp {
+          font-size: 2rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Global Weather Snapshot</h1>
+        <div class="subhead">
+          <span class="badge">5 Cities · Today</span>
+          <span data-updated>Updated moments ago</span>
+        </div>
+      </header>
+
+      <main>
+        <ul class="grid" role="list">
+          <li class="card" aria-label="Paris weather">
+            <h2>Paris</h2>
+            <p class="temp">18°C</p>
+            <div class="conditions" aria-label="Sunny">
+              <span class="dot sunny" aria-hidden="true"></span>
+              Sunny
+            </div>
+            <div class="details">
+              <div class="detail-row">Humidity <span>44%</span></div>
+              <div class="detail-row">Wind <span>12 km/h</span></div>
+            </div>
+          </li>
+
+          <li class="card" aria-label="Tokyo weather">
+            <h2>Tokyo</h2>
+            <p class="temp">23°C</p>
+            <div class="conditions" aria-label="Cloudy">
+              <span class="dot cloudy" aria-hidden="true"></span>
+              Cloudy
+            </div>
+            <div class="details">
+              <div class="detail-row">Humidity <span>61%</span></div>
+              <div class="detail-row">Wind <span>18 km/h</span></div>
+            </div>
+          </li>
+
+          <li class="card" aria-label="New York weather">
+            <h2>New York</h2>
+            <p class="temp">9°C</p>
+            <div class="conditions" aria-label="Rainy">
+              <span class="dot rainy" aria-hidden="true"></span>
+              Rainy
+            </div>
+            <div class="details">
+              <div class="detail-row">Humidity <span>72%</span></div>
+              <div class="detail-row">Wind <span>26 km/h</span></div>
+            </div>
+          </li>
+
+          <li class="card" aria-label="Sydney weather">
+            <h2>Sydney</h2>
+            <p class="temp">27°C</p>
+            <div class="conditions" aria-label="Sunny">
+              <span class="dot sunny" aria-hidden="true"></span>
+              Sunny
+            </div>
+            <div class="details">
+              <div class="detail-row">Humidity <span>38%</span></div>
+              <div class="detail-row">Wind <span>15 km/h</span></div>
+            </div>
+          </li>
+
+          <li class="card" aria-label="Nairobi weather">
+            <h2>Nairobi</h2>
+            <p class="temp">20°C</p>
+            <div class="conditions" aria-label="Cloudy">
+              <span class="dot cloudy" aria-hidden="true"></span>
+              Cloudy
+            </div>
+            <div class="details">
+              <div class="detail-row">Humidity <span>55%</span></div>
+              <div class="detail-row">Wind <span>10 km/h</span></div>
+            </div>
+          </li>
+        </ul>
+      </main>
+
+      <footer>
+        Notional data for layout demonstration only.
+      </footer>
+    </div>
+
+    <script>
+      const updatedEl = document.querySelector('[data-updated]');
+      if (!updatedEl) {
+        throw new Error('Expected updated timestamp element.');
+      }
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+      updatedEl.textContent = `Updated ${formatter.format(new Date())}`;
+    </script>
+  </body>
+</html>
