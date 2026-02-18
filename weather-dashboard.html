@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0c1b2a;
+        --surface: #122538;
+        --surface-2: #182f46;
+        --text: #e9f1f7;
+        --muted: #a9bbca;
+        --accent: #4ed1c1;
+        --warn: #ffb86b;
+        --radius: 16px;
+        --shadow: 0 18px 40px rgba(9, 20, 34, 0.45);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        color: var(--text);
+        min-height: 100vh;
+        background: radial-gradient(circle at top, #173452 0%, var(--bg) 50%, #081521 100%);
+      }
+
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 28px;
+      }
+
+      .title {
+        margin: 0;
+        font-size: clamp(1.6rem, 2vw + 1rem, 2.6rem);
+        letter-spacing: 0.02em;
+      }
+
+      .subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .summary {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        padding: 12px 16px;
+        border-radius: 999px;
+        background: rgba(18, 37, 56, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .summary span {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .grid {
+        display: grid;
+        gap: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .card {
+        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+        border-radius: var(--radius);
+        padding: 18px;
+        box-shadow: var(--shadow);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        display: grid;
+        gap: 14px;
+        min-height: 210px;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 1.2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .badge {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(78, 209, 193, 0.15);
+        color: var(--accent);
+      }
+
+      .temp {
+        font-size: 2.6rem;
+        font-weight: 600;
+      }
+
+      .meta {
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .meta strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hint {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 640px) {
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .summary {
+          width: 100%;
+          justify-content: space-between;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <div>
+          <h1 class="title">Weather Dashboard</h1>
+          <p class="subtitle">Snapshot of today across key cities.</p>
+        </div>
+        <div class="summary" aria-live="polite">
+          <span>Updated just now</span>
+          <span>5 cities</span>
+        </div>
+      </header>
+
+      <main class="grid" id="weather-grid" aria-label="City weather cards"></main>
+      <p class="hint">All values are illustrative demo data.</p>
+    </div>
+
+    <script>
+      const weatherData = [
+        { city: 'Paris', temp: 18, condition: 'Cloudy', humidity: 62, wind: 14 },
+        { city: 'Tokyo', temp: 24, condition: 'Rainy', humidity: 78, wind: 18 },
+        { city: 'New York', temp: 21, condition: 'Sunny', humidity: 54, wind: 11 },
+        { city: 'Sydney', temp: 26, condition: 'Sunny', humidity: 49, wind: 16 },
+        { city: 'Nairobi', temp: 22, condition: 'Cloudy', humidity: 58, wind: 12 }
+      ];
+
+      const grid = document.getElementById('weather-grid');
+
+      weatherData.forEach((entry) => {
+        const card = document.createElement('article');
+        card.className = 'card';
+
+        const title = document.createElement('h2');
+        const cityName = document.createElement('span');
+        cityName.textContent = entry.city;
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = entry.condition;
+        title.append(cityName, badge);
+
+        const temp = document.createElement('div');
+        temp.className = 'temp';
+        temp.textContent = `${entry.temp}°C`;
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = `
+          <div class="meta-row"><span>Humidity</span><strong>${entry.humidity}%</strong></div>
+          <div class="meta-row"><span>Wind</span><strong>${entry.wind} km/h</strong></div>
+        `;
+
+        card.append(title, temp, meta);
+        grid.append(card);
+      });
+    </script>
+  </body>
+</html>
