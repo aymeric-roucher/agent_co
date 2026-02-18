@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f6f8;
+        --card: #ffffff;
+        --ink: #1b1f2a;
+        --muted: #5b6375;
+        --accent: #0f766e;
+        --ring: rgba(15, 118, 110, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top, #ffffff 0%, #eef1f7 45%, #e9edf5 100%);
+        color: var(--ink);
+        min-height: 100vh;
+      }
+
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+        display: grid;
+        gap: 24px;
+      }
+
+      header {
+        display: grid;
+        gap: 8px;
+      }
+
+      h1 {
+        font-size: clamp(1.8rem, 2.5vw, 2.6rem);
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 60ch;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: 18px;
+        padding: 20px 20px 18px;
+        box-shadow: 0 16px 40px rgba(16, 24, 40, 0.08);
+        border: 1px solid rgba(15, 23, 42, 0.06);
+        display: grid;
+        gap: 14px;
+      }
+
+      .card-header {
+        display: grid;
+        gap: 6px;
+      }
+
+      .city {
+        font-size: 1.15rem;
+        font-weight: 600;
+      }
+
+      .condition {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px var(--ring);
+      }
+
+      .temp {
+        font-size: 2.4rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .details {
+        display: grid;
+        gap: 8px;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .details span {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .details strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      @media (max-width: 600px) {
+        main {
+          padding: 32px 18px 48px;
+        }
+
+        .card {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Weather Dashboard</h1>
+        <p>Made-up conditions for a quick at-a-glance check across five global cities.</p>
+      </header>
+
+      <section class="grid" aria-label="Weather cards">
+        <article class="card">
+          <div class="card-header">
+            <div class="city">Paris</div>
+            <div class="condition"><span class="dot"></span>Sunny</div>
+          </div>
+          <div class="temp">18°C</div>
+          <div class="details">
+            <span>Humidity <strong>52%</strong></span>
+            <span>Wind <strong>14 km/h</strong></span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div class="city">Tokyo</div>
+            <div class="condition"><span class="dot"></span>Cloudy</div>
+          </div>
+          <div class="temp">21°C</div>
+          <div class="details">
+            <span>Humidity <strong>61%</strong></span>
+            <span>Wind <strong>18 km/h</strong></span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div class="city">New York</div>
+            <div class="condition"><span class="dot"></span>Rainy</div>
+          </div>
+          <div class="temp">12°C</div>
+          <div class="details">
+            <span>Humidity <strong>74%</strong></span>
+            <span>Wind <strong>22 km/h</strong></span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div class="city">Sydney</div>
+            <div class="condition"><span class="dot"></span>Sunny</div>
+          </div>
+          <div class="temp">25°C</div>
+          <div class="details">
+            <span>Humidity <strong>48%</strong></span>
+            <span>Wind <strong>12 km/h</strong></span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div class="city">Nairobi</div>
+            <div class="condition"><span class="dot"></span>Cloudy</div>
+          </div>
+          <div class="temp">19°C</div>
+          <div class="details">
+            <span>Humidity <strong>58%</strong></span>
+            <span>Wind <strong>16 km/h</strong></span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
