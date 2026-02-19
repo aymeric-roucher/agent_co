@@ -50,10 +50,10 @@ describe('VP tools', () => {
     const tools = createVPTools(state);
     state.sessions.set('w1', fakeSession('w1', 'branch-a'));
 
-    const result = await tools.continue_worker.execute!({ worker_id: 'w1', approve: true, message: 'looks good' }, opts('1'));
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', approve: true }, opts('1'));
     expect(result).toContain('Worker w1 response');
     expect(result).toContain('Worker continued working');
-    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', true, 'looks good');
+    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', true, undefined);
   });
 
   it('continue_worker returns not found for unknown id', async () => {

@@ -98,7 +98,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
           system: buildVPPrompt(department, companyConfig),
           tools,
           messages,
-          stopWhen: stepCountIs(10),
+          stopWhen: stepCountIs(50),
           onStepFinish: ({ toolCalls, toolResults, content, text, usage }) => {
             tracker.logStep(toolCalls);
             totalTokens += (usage?.totalTokens ?? 0);
@@ -139,9 +139,8 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
         continue;
       }
 
-      if (result.text) {
-        messages.push({ role: 'assistant', content: result.text });
-      }
+      // Push the full conversation history (tool calls + results + text) so next turn has context
+      messages.push(...result.response.messages);
 
       tracker.logEvent('vp_turn_complete', { totalTokens });
 
@@ -157,7 +156,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
           system: buildVPPrompt(department, companyConfig),
           tools,
           messages,
-          stopWhen: stepCountIs(10),
+          stopWhen: stepCountIs(50),
         });
 
         tracker.logEvent('vp_restart', { reason: 'context_limit', totalTokens });
