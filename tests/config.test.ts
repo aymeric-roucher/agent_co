@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
-import { loadConfig, saveConfig, ensureDepartmentDirs, type CompanyConfig } from '../src/config.js';
+import { mkdirSync, rmSync, writeFileSync, existsSync } from 'fs';
+import { loadConfig, saveConfig, ensureDepartmentDirs, COMPANY_DIR, type CompanyConfig } from '../src/config.js';
 import path from 'path';
 
 const TMP = path.join(import.meta.dirname, '.tmp-config-test');
@@ -37,7 +37,26 @@ describe('config', () => {
     expect(() => loadConfig(configPath)).toThrow();
   });
 
-  it('creates department directories', () => {
-    expect(typeof ensureDepartmentDirs).toBe('function');
+  it('throws on non-existent file', () => {
+    expect(() => loadConfig(path.join(TMP, 'nope.yaml'))).toThrow();
+  });
+
+  it('accepts codex worker_type', () => {
+    const configPath = path.join(TMP, 'codex.yaml');
+    const codexConfig: CompanyConfig = { ...validConfig, worker_type: 'codex' };
+    saveConfig(codexConfig, configPath);
+    expect(loadConfig(configPath).worker_type).toBe('codex');
+  });
+
+  it('saveConfig creates parent directories', () => {
+    const configPath = path.join(TMP, 'deep', 'nested', 'config.yaml');
+    saveConfig(validConfig, configPath);
+    expect(existsSync(configPath)).toBe(true);
+  });
+
+  it('throws on missing department fields', () => {
+    const configPath = path.join(TMP, 'bad-dept.yaml');
+    writeFileSync(configPath, 'repo: /tmp\nworker_type: claude_code\ndepartments:\n  - slug: x\n');
+    expect(() => loadConfig(configPath)).toThrow();
   });
 });

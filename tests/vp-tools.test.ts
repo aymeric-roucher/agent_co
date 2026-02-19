@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs';
 import path from 'path';
 import { createVPTools, type VPState } from '../src/vp/agent.js';
 import { Tracker } from '../src/tracker.js';
@@ -57,6 +57,15 @@ describe('VP tools', () => {
     expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', true, undefined);
   });
 
+  it('continue_worker passes denial reason', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    state.sessions.set('w1', fakeSession('w1', 'branch-a'));
+
+    await tools.continue_worker.execute!({ worker_id: 'w1', approve: false, denial_reason: 'bad approach' }, opts('1'));
+    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', false, 'bad approach');
+  });
+
   it('continue_worker returns not found for unknown id', async () => {
     const state = makeState();
     const tools = createVPTools(state);
@@ -93,6 +102,14 @@ describe('VP tools', () => {
     expect(result).toContain('not found');
   });
 
+  it('kill_worker calls killSession on client', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    state.sessions.set('w1', fakeSession('w1', 'b'));
+    await tools.kill_worker.execute!({ worker_id: 'w1' }, opts('1'));
+    expect(state.mcpClient.killSession).toHaveBeenCalledWith('thread-abc');
+  });
+
   // --- list_workers ---
   it('list_workers returns table when sessions exist', async () => {
     const state = makeState();
@@ -114,6 +131,14 @@ describe('VP tools', () => {
     expect(result).toBe('No workers');
   });
 
+  it('list_workers includes thread id', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    state.sessions.set('w1', fakeSession('w1', 'b'));
+    const result = await tools.list_workers.execute!({}, opts('1'));
+    expect(result).toContain('thread:thread-abc');
+  });
+
   // --- mark_done ---
   it('mark_done sets done flag and logs event', async () => {
     const state = makeState();
@@ -124,6 +149,13 @@ describe('VP tools', () => {
 
     const events = readFileSync(path.join(state.companyDir, 'logs', 'test', 'events.jsonl'), 'utf-8');
     expect(events).toContain('vp_done');
+  });
+
+  it('mark_done includes summary in response', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    const result = await tools.mark_done.execute!({ summary: 'Shipped feature X' }, opts('1'));
+    expect(result).toContain('Shipped feature X');
   });
 
   // --- update_work_log ---
@@ -192,5 +224,49 @@ describe('VP tools', () => {
     const result = await tools.read_common_doc.execute!({}, opts('4'));
     expect(result).toContain('line 1');
     expect(result).toContain('line 2');
+  });
+
+  // --- start_worker MAX_WORKERS limit ---
+  it('start_worker throws when max workers reached', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+
+    // Fill up with 3 active sessions
+    state.sessions.set('w1', fakeSession('w1', 'b1'));
+    state.sessions.set('w2', fakeSession('w2', 'b2'));
+    state.sessions.set('w3', fakeSession('w3', 'b3'));
+
+    await expect(
+      tools.start_worker.execute!({ task: 'new task', branch_name: 'b4' }, opts('1'))
+    ).rejects.toThrow(/max 3/i);
+  });
+
+  it('start_worker allows new worker when some are done', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+
+    state.sessions.set('w1', fakeSession('w1', 'b1'));
+    state.sessions.set('w2', fakeSession('w2', 'b2'));
+    state.sessions.set('w3', fakeSession('w3', 'b3', 'done')); // done, not active
+
+    // Should not throw since only 2 active
+    // But it will fail on createWorktree since repo doesn't exist,
+    // so we just verify the max-workers check passes by checking it doesn't
+    // throw with the "max" message
+    try {
+      await tools.start_worker.execute!({ task: 'new task', branch_name: 'b4' }, opts('1'));
+    } catch (e: any) {
+      // Should fail on git, not on max workers
+      expect(e.message).not.toMatch(/max 3/i);
+    }
+  });
+
+  // --- shell tool ---
+  it('shell returns formatted output', async () => {
+    const state = makeState();
+    state.companyConfig.repo = '/tmp';
+    const tools = createVPTools(state);
+    const result = await tools.shell.execute!({ command: 'echo hello' }, opts('1'));
+    expect(result).toContain('hello');
   });
 });
