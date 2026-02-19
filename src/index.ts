@@ -8,6 +8,10 @@ import { execSync } from 'child_process';
 import path from 'path';
 import { listWorktrees, removeWorktree } from './git.js';
 
+function isExecError(err: unknown): err is Error & { status: number } {
+  return err instanceof Error && typeof (err as Record<string, unknown>)['status'] === 'number';
+}
+
 const program = new Command();
 program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
 
@@ -72,22 +76,33 @@ program
       process.exit(1);
     }
 
+    let pids: number[] = [];
     try {
-      const psOutput = execSync(`ps aux | grep "start ${slug}" | grep -v grep`, {
-        encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim();
-
-      if (!psOutput) { console.log(`No running VP found for "${slug}"`); process.exit(0); }
-
-      const pids = psOutput.split('\n').map(line => line.trim().split(/\s+/)[1]);
-      for (const pid of pids) {
-        try { execSync(`kill ${pid}`, { stdio: 'pipe' }); } catch { /* already dead */ }
+      const out = execSync(`pgrep -f "start ${slug}"`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+      pids = out ? out.split('\n').map(Number).filter(p => p > 0 && p !== process.pid) : [];
+    } catch (err: unknown) {
+      if (isExecError(err) && err.status === 1) {
+        // pgrep exit 1 = no matching processes
+      } else if (isExecError(err) && err.status === 127) {
+        // pgrep unavailable — fall back to ps
+        try {
+          const out = execSync(`ps aux | grep "start ${slug}" | grep -v grep`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+          pids = out ? out.split('\n').map(l => Number(l.trim().split(/\s+/)[1])).filter(p => p > 0 && p !== process.pid) : [];
+        } catch (psErr: unknown) {
+          if (!isExecError(psErr) || psErr.status !== 1) {
+            console.error(`Error stopping VP: ${psErr instanceof Error ? psErr.message : String(psErr)}`);
+            process.exit(1);
+          }
+        }
+      } else {
+        console.error(`Error stopping VP: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
       }
-      console.log(`✓ VP stopped for "${slug}" (PIDs: ${pids.join(', ')})`);
-    } catch (err) {
-      if ((err as any).status === 1) { console.log(`No running VP found for "${slug}"`); }
-      else { console.error(`Error: ${err instanceof Error ? err.message : String(err)}`); process.exit(1); }
     }
+
+    if (pids.length === 0) { console.log(`No running VP found for "${slug}"`); process.exit(0); }
+    for (const pid of pids) process.kill(pid, 'SIGTERM');
+    console.log(`✓ VP stopped for "${slug}" (PIDs: ${pids.join(', ')})`);
   });
 
 program
