@@ -8,6 +8,45 @@ import { execSync } from 'child_process';
 import path from 'path';
 import { listWorktrees, removeWorktree } from './git.js';
 
+function isExecError(err: unknown): err is Error & { status: number } {
+  return err instanceof Error && typeof (err as Record<string, unknown>).status === 'number';
+}
+
+function discoverVPPids(slug: string): number[] {
+  try {
+    const output = execSync(`pgrep -f "start ${slug}"`, {
+      encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    if (!output) return [];
+    return output.split('\n').map(l => {
+      const pid = Number(l.trim());
+      if (!Number.isInteger(pid) || pid <= 0) throw new Error(`Invalid PID: "${l.trim()}"`);
+      return pid;
+    });
+  } catch (err) {
+    if (isExecError(err) && err.status === 1) return [];
+    if (err instanceof Error && /not found|ENOENT/i.test(err.message)) return discoverVPPidsFallback(slug);
+    throw err;
+  }
+}
+
+function discoverVPPidsFallback(slug: string): number[] {
+  try {
+    const output = execSync(`ps aux | grep "start ${slug}" | grep -v grep`, {
+      encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    if (!output) return [];
+    return output.split('\n').map(line => {
+      const pid = Number(line.trim().split(/\s+/)[1]);
+      if (!Number.isInteger(pid) || pid <= 0) throw new Error(`Invalid PID from ps: "${line}"`);
+      return pid;
+    });
+  } catch (err) {
+    if (isExecError(err) && err.status === 1) return [];
+    throw err;
+  }
+}
+
 const program = new Command();
 program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
 
@@ -73,20 +112,19 @@ program
     }
 
     try {
-      const psOutput = execSync(`ps aux | grep "start ${slug}" | grep -v grep`, {
-        encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim();
+      const pids = discoverVPPids(slug);
+      if (pids.length === 0) { console.log(`No running VP found for "${slug}"`); process.exit(0); }
 
-      if (!psOutput) { console.log(`No running VP found for "${slug}"`); process.exit(0); }
-
-      const pids = psOutput.split('\n').map(line => line.trim().split(/\s+/)[1]);
       for (const pid of pids) {
-        try { execSync(`kill ${pid}`, { stdio: 'pipe' }); } catch { /* already dead */ }
+        try { process.kill(pid, 'SIGTERM'); } catch (err) {
+          if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ESRCH') continue;
+          throw err;
+        }
       }
       console.log(`✓ VP stopped for "${slug}" (PIDs: ${pids.join(', ')})`);
     } catch (err) {
-      if ((err as any).status === 1) { console.log(`No running VP found for "${slug}"`); }
-      else { console.error(`Error: ${err instanceof Error ? err.message : String(err)}`); process.exit(1); }
+      console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
     }
   });
 
