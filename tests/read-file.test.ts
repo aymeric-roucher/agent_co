@@ -11,9 +11,20 @@ describe('isImageFile', () => {
   });
 
   it.each([
-    '.ts', '.html', '.css', '.md', '.json',
+    '.ts', '.html', '.css', '.md', '.json', '.yaml', '.txt',
   ])('returns false for %s', (ext) => {
     expect(isImageFile(`/path/to/file${ext}`)).toBe(false);
+  });
+
+  it('is case-insensitive', () => {
+    expect(isImageFile('/path/to/file.PNG')).toBe(true);
+    expect(isImageFile('/path/to/file.Jpg')).toBe(true);
+    expect(isImageFile('/path/to/file.SVG')).toBe(true);
+  });
+
+  it('handles paths with multiple dots', () => {
+    expect(isImageFile('/path/to/my.file.png')).toBe(true);
+    expect(isImageFile('/path/to/my.file.ts')).toBe(false);
   });
 });
 
@@ -64,6 +75,22 @@ describe('readFileContent slice mode', () => {
     const content = 'one\r\ntwo\r\n';
     const result = readFileContent(content, { filePath: 'f', offset: 1, limit: 2 });
     expect(result).toBe('L1: one\nL2: two');
+  });
+
+  it('reads single-line file without trailing newline', () => {
+    const result = readFileContent('hello', { filePath: 'f', offset: 1, limit: 10 });
+    expect(result).toBe('L1: hello');
+  });
+
+  it('throws on empty content (offset exceeds 0 lines)', () => {
+    expect(() => readFileContent('', { filePath: 'f', offset: 1, limit: 10 }))
+      .toThrow('offset exceeds file length');
+  });
+
+  it('reads last line when offset equals line count', () => {
+    const content = 'a\nb\nc\n';
+    const result = readFileContent(content, { filePath: 'f', offset: 3, limit: 10 });
+    expect(result).toBe('L3: c');
   });
 });
 
@@ -184,5 +211,28 @@ public:
     expect(result).toContain('L13:     // Run the code');
     expect(result).toContain('L14:     int run() const {');
     expect(result).toContain('L18:             case Mode::Slow:');
+  });
+
+  it('errors when anchorLine is 0', () => {
+    expect(() => readFileContent('a\nb\n', {
+      filePath: 'f', offset: 1, limit: 10, mode: 'indentation',
+      indentation: { anchorLine: 0, maxLevels: 0, includeSiblings: false },
+    })).toThrow('anchorLine must be a 1-indexed line number');
+  });
+
+  it('errors when anchorLine exceeds file length', () => {
+    expect(() => readFileContent('one\ntwo\n', {
+      filePath: 'f', offset: 1, limit: 10, mode: 'indentation',
+      indentation: { anchorLine: 99, maxLevels: 0, includeSiblings: false },
+    })).toThrow('anchorLine exceeds file length');
+  });
+
+  it('returns single line when limit is 1', () => {
+    const content = 'first\nsecond\nthird\n';
+    const result = readFileContent(content, {
+      filePath: 'f', offset: 2, limit: 1, mode: 'indentation',
+      indentation: { anchorLine: 2, maxLevels: 0, includeSiblings: false },
+    });
+    expect(result).toBe('L2: second');
   });
 });
