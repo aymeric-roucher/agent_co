@@ -52,7 +52,7 @@ export function createVPTools(state: VPState) {
         branch_name: z.string().describe('Git branch name'),
       }),
       execute: async ({ task, branch_name }) => {
-        const MAX_WORKERS = 2;
+        const MAX_WORKERS = 3;
         const active = [...state.sessions.values()].filter((s) => s.status === 'active').length;
         if (active >= MAX_WORKERS) {
           throw new Error(`Cannot start worker: already ${active} active workers (max ${MAX_WORKERS}). Use continue_worker or kill_worker first.`);
@@ -78,13 +78,13 @@ export function createVPTools(state: VPState) {
     }),
 
     continue_worker: tool({
-      description: 'Approve or deny the worker\'s pending action, optionally with guidance.',
+      description: 'Approve or deny the worker\'s pending action. When denying, provide a reason so the worker can adjust.',
       inputSchema: z.object({
         worker_id: z.string().describe('Worker ID'),
-        approve: z.boolean().describe('Whether to approve the pending action'),
-        message: z.string().optional().describe('Optional feedback or denial reason'),
+        approve: z.boolean().describe('true to execute the action, false to deny it'),
+        denial_reason: z.string().optional().describe('ONLY when approve=false: explain why or what to do instead'),
       }),
-      execute: async ({ worker_id, approve, message }) => {
+      execute: async ({ worker_id, approve, denial_reason: message }) => {
         const session = state.sessions.get(worker_id);
         if (!session) return `Worker ${worker_id} not found`;
         if (session.status !== 'active') return `Worker ${worker_id} is ${session.status}`;
@@ -122,6 +122,22 @@ export function createVPTools(state: VPState) {
           (s) => `${s.id} | ${s.branch} | ${s.status} | thread:${s.threadId}`
         );
         return ['ID | Branch | Status | Thread', ...lines].join('\n');
+      },
+    }),
+
+    run_bash: tool({
+      description: 'Run a bash command directly (for screenshots, git operations, inspecting files, etc.)',
+      inputSchema: z.object({
+        command: z.string().describe('The bash command to run'),
+        cwd: z.string().optional().describe('Working directory (defaults to repo root)'),
+      }),
+      execute: async ({ command, cwd: cmdCwd }) => {
+        const workDir = cmdCwd || state.companyConfig.repo;
+        state.log(`[tool:run_bash] ${command}`);
+        const output = execSync(command, {
+          cwd: workDir, encoding: 'utf-8', stdio: 'pipe', timeout: 120_000,
+        });
+        return output.trim() || '(no output)';
       },
     }),
 
