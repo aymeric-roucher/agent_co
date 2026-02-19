@@ -103,7 +103,7 @@ function readSlice(content: string, offset: number, limit: number): string[] {
 
   const totalLines = lines.length;
   if (offset > totalLines) {
-    throw new Error('offset exceeds file length');
+    throw new Error(`Offset ${offset} exceeds file length (${totalLines} lines)`);
   }
 
   const collected: string[] = [];
@@ -125,14 +125,14 @@ function readBlock(
   options: IndentationArgs,
 ): string[] {
   const anchorLine = options.anchorLine ?? offset;
-  if (anchorLine === 0) throw new Error('anchorLine must be a 1-indexed line number');
+  if (anchorLine === 0) throw new Error('Anchor line must be a 1-indexed line number, got 0');
 
   const guardLimit = options.maxLines ?? limit;
-  if (guardLimit === 0) throw new Error('maxLines must be greater than zero');
+  if (guardLimit === 0) throw new Error('Max lines must be greater than zero');
 
   const collected = collectFileLines(content);
   if (collected.length === 0 || anchorLine > collected.length) {
-    throw new Error('anchorLine exceeds file length');
+    throw new Error(`Anchor line ${anchorLine} exceeds file length (${collected.length} lines)`);
   }
 
   const anchorIndex = anchorLine - 1;
@@ -234,8 +234,8 @@ export function readFileContent(content: string, args: ReadFileArgs): string {
   const limit = args.limit ?? 2000;
   const mode = args.mode ?? 'slice';
 
-  if (offset === 0) throw new Error('offset must be a 1-indexed line number');
-  if (limit === 0) throw new Error('limit must be greater than zero');
+  if (offset === 0) throw new Error('Offset must be a 1-indexed line number, got 0');
+  if (limit === 0) throw new Error('Limit must be greater than zero');
 
   if (mode === 'indentation') {
     const indentOpts: IndentationArgs = { ...DEFAULT_INDENTATION, ...args.indentation };

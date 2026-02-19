@@ -134,9 +134,9 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log(`\n**ERROR:** ${msg}`);
+        log(`\n**Error:** ${msg}`);
         tracker.logEvent('vp_error', { error: msg });
-        messages.push({ role: 'user', content: `ERROR from tool execution: ${msg}\n\nAdjust your approach and continue.` });
+        messages.push({ role: 'user', content: `Error from tool execution: ${msg}\n\nAdjust your approach and continue.` });
         continue;
       }
 

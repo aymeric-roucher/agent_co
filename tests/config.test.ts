@@ -28,13 +28,17 @@ describe('config', () => {
   it('throws on invalid config (missing repo)', () => {
     const configPath = path.join(TMP, 'bad.yaml');
     writeFileSync(configPath, 'departments: []\n');
-    expect(() => loadConfig(configPath)).toThrow();
+    expect(() => loadConfig(configPath)).toThrow('Invalid config');
   });
 
   it('throws on invalid worker_type', () => {
     const configPath = path.join(TMP, 'bad2.yaml');
     writeFileSync(configPath, 'repo: /tmp\nworker_type: invalid\ndepartments:\n  - slug: x\n    name: X\n    description: y\n');
-    expect(() => loadConfig(configPath)).toThrow();
+    expect(() => loadConfig(configPath)).toThrow('Invalid config');
+  });
+
+  it('throws on missing config file', () => {
+    expect(() => loadConfig(path.join(TMP, 'nonexistent.yaml'))).toThrow("Config file not found");
   });
 
   it('creates department directories', () => {

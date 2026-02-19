@@ -43,11 +43,14 @@ export function listWorktrees(repo: string): WorktreeInfo[] {
       current.head = line.slice(5);
     } else if (line.startsWith('branch ')) {
       current.branch = line.slice(7).replace('refs/heads/', '');
+    } else if (line === 'detached') {
+      current.branch = '(detached)';
     } else if (line === '') {
       if (current.path && current.head) {
+        if (!current.branch) throw new Error(`Worktree at ${current.path} has no branch info`);
         entries.push({
           path: current.path,
-          branch: current.branch ?? '(detached)',
+          branch: current.branch,
           head: current.head,
         });
       }

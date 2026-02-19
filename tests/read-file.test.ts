@@ -35,17 +35,17 @@ describe('readFileContent slice mode', () => {
 
   it('errors when offset exceeds length', () => {
     expect(() => readFileContent('only\n', { filePath: 'f', offset: 3, limit: 1 }))
-      .toThrow('offset exceeds file length');
+      .toThrow('Offset 3 exceeds file length (1 lines)');
   });
 
   it('errors when offset is 0', () => {
     expect(() => readFileContent('x\n', { filePath: 'f', offset: 0 }))
-      .toThrow('offset must be a 1-indexed line number');
+      .toThrow('Offset must be a 1-indexed line number, got 0');
   });
 
   it('errors when limit is 0', () => {
     expect(() => readFileContent('x\n', { filePath: 'f', limit: 0 }))
-      .toThrow('limit must be greater than zero');
+      .toThrow('Limit must be greater than zero');
   });
 
   it('respects limit even with more lines', () => {
