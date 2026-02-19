@@ -9,17 +9,21 @@ import path from 'path';
 import { listWorktrees, removeWorktree } from './git.js';
 
 const program = new Command();
-program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
+program
+  .name('vp')
+  .description('Manage autonomous VP agents that spawn and supervise coding workers')
+  .version('0.1.0');
 
 program
   .command('setup')
-  .description('Run the secretary to set up the company')
+  .description('Initialize config, departments, and .gitignore interactively')
   .action(async () => {
     await runSecretary();
   });
 
 program
-  .command('start <slug>')
+  .command('start')
+  .argument('<slug>', 'Department slug (e.g. "cli-improvement")')
   .description('Start a VP daemon for a department')
   .action(async (slug: string) => {
     const config = loadConfig();
@@ -34,7 +38,7 @@ program
 
 program
   .command('list')
-  .description('List all departments')
+  .description('List all departments with slug, name, and description')
   .action(() => {
     const config = loadConfig();
     for (const dept of config.departments) {
@@ -44,7 +48,7 @@ program
 
 program
   .command('status')
-  .description('Show status of all departments')
+  .description('Show work progress and last event for each department')
   .action(() => {
     const config = loadConfig();
     for (const dept of config.departments) {
@@ -62,8 +66,9 @@ program
   });
 
 program
-  .command('stop <slug>')
-  .description('Stop a running VP daemon for a department')
+  .command('stop')
+  .argument('<slug>', 'Department slug to stop')
+  .description('Stop a running VP daemon by killing its process')
   .action((slug: string) => {
     const config = loadConfig();
     const dept = config.departments.find((d) => d.slug === slug);
@@ -91,11 +96,12 @@ program
   });
 
 program
-  .command('logs [slug]')
-  .description('Show VP or worker logs')
-  .option('-f, --follow', 'Follow logs in real-time')
-  .option('-n, --lines <number>', 'Number of lines to show', '50')
-  .option('-w, --workers', 'Show worker logs instead of VP logs')
+  .command('logs')
+  .argument('[slug]', 'Department slug (required unless --workers)')
+  .description('Tail VP logs for a department, or latest worker log with --workers')
+  .option('-f, --follow', 'Stream new log lines as they arrive')
+  .option('-n, --lines <number>', 'Number of recent lines to show', '50')
+  .option('-w, --workers', 'Show latest worker log instead of VP log')
   .action((slug: string | undefined, options: { follow?: boolean; lines?: string; workers?: boolean }) => {
     if (options.workers) {
       const logsDir = path.join('company', 'logs', 'workers');
@@ -116,9 +122,10 @@ program
   });
 
 program
-  .command('reset <slug>')
-  .description('Reset a department by wiping all memory')
-  .option('-f, --force', 'Skip confirmation prompt')
+  .command('reset')
+  .argument('<slug>', 'Department slug to reset')
+  .description('Wipe workspace, logs, and worktrees for a department')
+  .option('-f, --force', 'Skip confirmation and delete immediately')
   .action((slug: string, options: { force?: boolean }) => {
     const config = loadConfig();
     const dept = config.departments.find((d) => d.slug === slug);
