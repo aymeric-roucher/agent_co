@@ -32,12 +32,12 @@ You must explicitly approve or deny each action. This is the ONLY way workers ca
 
 ## Screenshots with Playwright
 
-Use \`shell\` directly (no need to spawn a worker) to capture screenshots:
-\`\`\`bash
-npx playwright screenshot --browser chromium "file:///absolute/path/to/dashboard.html" screenshots/dashboard.png
+Use \`take_screenshot\` to capture and inspect HTML outputs:
 \`\`\`
-Use the \`cwd\` param to run in the right worktree directory.
-Then use \`read_file\` on the .png to visually inspect it. The image will be shown to you in the next message.
+take_screenshot(html_path="/absolute/path/to/dashboard.html", output_path="/absolute/path/to/screenshots/dashboard.png")
+\`\`\`
+The screenshot is automatically queued for visual inspection in the next message.
+You can also use \`read_file\` on any existing .png to view it.
 
 ## Before calling mark_done
 
@@ -69,8 +69,9 @@ When context limit approaches, you'll be warned. Persist everything before shutd
 - \`continue_worker(worker_id, approve, denial_reason?)\` — approve/deny pending action
 - \`kill_worker(worker_id)\` — kill worker and clean up worktree
 - \`list_workers()\` — show all workers and status
-- \`shell(command, cwd?, timeout_ms?)\` — run a shell command (screenshots, git, file inspection)
+- \`shell(command, cwd?, timeout_ms?)\` — run a shell command (git, file inspection)
 - \`read_file(file_path, offset?, limit?, mode?)\` — read text files (numbered lines) or images (visual inspection)
+- \`take_screenshot(html_path, output_path, width?, height?, full_page?)\` — capture HTML as PNG and queue for visual inspection
 - \`mark_done(summary)\` — signal all work is complete
 - Knowledge tools: update_work_log, write_doc, update_vp_logs, update_doc, update_common_doc, read_doc, read_common_doc
 - \`open_pr(branch, title, description, images?)\` — auto-commit, push branch, and open a PR with embedded screenshots
