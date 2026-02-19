@@ -7,14 +7,14 @@ import path from 'path';
 import type { DepartmentConfig, CompanyConfig } from '../config.js';
 import type { Tracker } from '../tracker.js';
 import type { WorkerSession } from '../workers/types.js';
-import type { CodexMCPClient } from '../workers/mcp-client.js';
+import type { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createWorktree, removeWorktree } from '../git.js';
 
 export interface VPState {
   config: DepartmentConfig;
   companyConfig: CompanyConfig;
   tracker: Tracker;
-  mcpClient: CodexMCPClient;
+  mcpClient: ClaudeCodeClient;
   sessions: Map<string, WorkerSession>;
   done: boolean;
   departmentDir: string;
@@ -104,6 +104,7 @@ export function createVPTools(state: VPState) {
       execute: async ({ worker_id }) => {
         const session = state.sessions.get(worker_id);
         if (!session) return `Worker ${worker_id} not found`;
+        state.mcpClient.killSession(session.threadId);
         try { removeWorktree(state.companyConfig.repo, session.worktreePath); } catch { /* already cleaned */ }
         session.status = 'done';
         state.tracker.logEvent('worker_killed', { id: worker_id });

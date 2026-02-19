@@ -1,56 +1,59 @@
 # Agent Company
 
-Agentic VPs manage coding agent teams (Claude Code / Codex) autonomously. Each VP is a long-running daemon that spawns workers on git worktrees, acts as human-in-the-loop, maintains logs, and opens PRs.
+Agentic VPs manage coding agent teams autonomously. Each VP is a long-running daemon that spawns Claude Code workers on git worktrees, acts as human-in-the-loop, maintains logs, and opens PRs.
 
 ## Quick Start
 
 ```bash
-npm install && npm link   # Installs global `vp` command
+npm install && npm link
 cd /path/to/your/repo
-vp setup                  # Programmatic setup — pick worker type, areas, .gitignore
-vp start <slug>           # Start a VP daemon for a department
-vp reset <slug>           # Reset a deparartment's memory
-vp list                   # List departments
-vp status                 # Show department status
+vp setup          # Pick worker type, areas, .gitignore
+vp start <slug>   # Start a VP daemon
+vp reset <slug>   # Wipe department memory
+vp list / status
 ```
-
-Setup is mostly programmatic (instant CLI selectors). LLM is only called if you pick "Something else..." or "Type something..." to refine a department. Optionally adds `company/` to `.gitignore`.
 
 ## Architecture
 
-**VP Loop**: `generateText` (AI SDK v6) in a while loop with tools. VP drives workers turn-by-turn via MCP, reviews responses, kills underperformers, persists knowledge, opens PRs. Loop runs until VP calls `mark_done`.
+**VP Loop**: `generateText` (AI SDK v6) in a while loop with tools. Loop runs until VP calls `mark_done`.
 
-**Workers**: Codex MCP sessions in git worktrees. VP uses `start_worker` / `continue_worker` to interact. Each gets a `CLAUDE.md` with department knowledge injected.
+**Workers (Claude Code)**: Each worker is a Claude Code session running via the `@anthropic-ai/claude-code` SDK. The VP is the human-in-the-loop — every tool use (edit, write, bash) requires VP approval.
+
+### Worker control flow
+
+1. `start_worker(task, branch)` spawns Claude Code in a git worktree. Claude Code explores, thinks, then hits its first tool use that needs permission — and **blocks**. The tool call returns the permission request to the VP.
+2. The VP reviews the request and calls `continue_worker(worker_id, response)` with approval, denial, or guidance. This unblocks Claude Code.
+3. Claude Code executes (if approved) or adjusts (if denied), then continues until the **next** permission request — and blocks again.
+4. Repeat until Claude Code finishes. The VP controls every single action.
+
+No `--dangerously-skip-permissions`. No `--allowedTools`. The VP approves each action individually.
 
 **Knowledge**: `VP_LOGS.md`, `DOC.md`, `WORK.md` per department survive restarts. On context limit, VP persists everything then restarts with fresh context.
 
 ## Stack
 
-TypeScript, Vercel AI SDK v6 (`ai` + `@ai-sdk/openai`), MCP SDK (`@modelcontextprotocol/sdk`), Commander CLI, Zod, YAML config.
+TypeScript, Vercel AI SDK v6, Claude Code SDK (`@anthropic-ai/claude-code`), Commander CLI, Zod, YAML config.
 
 ## File Structure
 
 ```
 src/
-  index.ts          # CLI (commander)
-  config.ts         # YAML config load/save with zod validation
-  tracker.ts        # Central JSONL event logging
-  event-queue.ts    # Async queue (legacy, unused)
-  git.ts            # Git worktree management
-  secretary.ts      # Interactive onboarding agent
+  index.ts              # CLI (commander)
+  config.ts             # YAML config load/save
+  tracker.ts            # JSONL event logging
+  git.ts                # Git worktree management
+  secretary.ts          # Interactive onboarding
   vp/
-    agent.ts        # VP tool definitions (14 tools)
-    loop.ts         # VP daemon event loop
-    prompt.ts       # VP system prompt template
+    agent.ts            # VP tool definitions
+    loop.ts             # VP daemon event loop
+    prompt.ts           # VP system prompt
   workers/
-    types.ts        # WorkerHandle, WorkerEvent, WorkerSession
-    mcp-client.ts   # Codex MCP client (stdio transport)
-    claude-code.ts  # Claude Code subprocess driver (legacy)
-    codex.ts        # Codex subprocess driver (legacy)
-company/            # Runtime data (gitignored)
+    claude-code-client.ts  # Claude Code SDK client
+    types.ts               # WorkerSession types
+company/                # Runtime data (gitignored)
   config.yaml
-  departments/{slug}/  VP_LOGS.md, DOC.md, WORK.md, plans/, prds/
-  logs/{slug}/         events.jsonl, work-snapshots/
+  workspaces/{slug}/    VP_LOGS.md, DOC.md, WORK.md
+  logs/{slug}/          events.jsonl, vp-output.log
 ```
 
 ## Tests

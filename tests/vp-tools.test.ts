@@ -4,18 +4,17 @@ import path from 'path';
 import { createVPTools, type VPState } from '../src/vp/agent.js';
 import { Tracker } from '../src/tracker.js';
 import type { WorkerSession } from '../src/workers/types.js';
-import type { CodexMCPClient } from '../src/workers/mcp-client.js';
+import type { ClaudeCodeClient } from '../src/workers/claude-code-client.js';
 
 const TMP = path.join(import.meta.dirname, '.tmp-vp-tools-test');
 const opts = (id: string) => ({ toolCallId: id, messages: [] as [] });
 
-function fakeMCPClient(): CodexMCPClient {
+function fakeMCPClient(): ClaudeCodeClient {
   return {
-    connect: vi.fn(),
     startSession: vi.fn().mockResolvedValue({ threadId: 'thread-abc', content: 'Worker started working' }),
     continueSession: vi.fn().mockResolvedValue({ threadId: 'thread-abc', content: 'Worker continued working' }),
-    close: vi.fn(),
-  } as unknown as CodexMCPClient;
+    killSession: vi.fn(),
+  } as unknown as ClaudeCodeClient;
 }
 
 function makeState(): VPState {

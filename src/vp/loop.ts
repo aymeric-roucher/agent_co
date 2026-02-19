@@ -5,7 +5,7 @@ import path from 'path';
 import { COMPANY_DIR, DEFAULT_MODEL, type DepartmentConfig, type CompanyConfig } from '../config.js';
 import { Tracker } from '../tracker.js';
 import type { WorkerSession } from '../workers/types.js';
-import { CodexMCPClient } from '../workers/mcp-client.js';
+import { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createVPTools, type VPState } from './agent.js';
 import { buildVPPrompt } from './prompt.js';
 
@@ -37,9 +37,8 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
   const log = createLogger(department.slug, logsBase);
   const startTime = Date.now();
 
-  const mcpClient = new CodexMCPClient(DEFAULT_MODEL, log);
-  await mcpClient.connect();
-  log('MCP client connected to Codex');
+  const mcpClient = new ClaudeCodeClient(log);
+  log('Claude Code client ready');
 
   const state: VPState = {
     config: department,
@@ -162,7 +161,6 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
         });
 
         tracker.logEvent('vp_restart', { reason: 'context_limit', totalTokens });
-        await mcpClient.close();
         return runVP(department, companyConfig);
       }
 
@@ -177,7 +175,6 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
     }
   } finally {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-    log(`\n## Done (${elapsed}s total). Closing MCP client.`);
-    await mcpClient.close();
+    log(`\n## Done (${elapsed}s total).`);
   }
 }
