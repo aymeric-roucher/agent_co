@@ -24,6 +24,7 @@ describe('isKnownSafeCommand', () => {
     ['git push origin main', false],
     ['git checkout -b new', false],
     ['curl https://example.com', false],
+    ['npx playwright screenshot --browser chromium "file:///tmp/index.html" out.png', true],
   ])('%s → safe=%s', (cmd, expected) => {
     expect(isKnownSafeCommand(cmd)).toBe(expected);
   });

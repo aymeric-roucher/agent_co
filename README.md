@@ -32,7 +32,7 @@ No `--dangerously-skip-permissions`. No `--allowedTools`. The VP approves each a
 
 ## Stack
 
-TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Commander CLI, Zod 4, YAML config.
+TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Commander CLI, Zod 4, YAML config, Playwright (screenshots).
 
 ## File Structure
 
@@ -42,6 +42,7 @@ src/
   config.ts             # YAML config load/save
   tracker.ts            # JSONL event logging
   git.ts                # Git worktree management
+  screenshot.ts         # Playwright screenshot capture
   secretary.ts          # Interactive onboarding
   vp/
     agent.ts            # VP tool definitions
@@ -55,6 +56,22 @@ company/                # Runtime data (gitignored)
   workspaces/{slug}/    VP_LOGS.md, DOC.md, WORK.md
   logs/{slug}/          events.jsonl, vp-output.log
 ```
+
+## Playwright Setup
+
+```bash
+npm install                    # installs playwright
+npx playwright install chromium # downloads browser binary
+```
+
+VPs use `src/screenshot.ts` to capture UI screenshots:
+
+```typescript
+import { captureScreenshot } from './screenshot.js';
+await captureScreenshot({ url: 'file:///path/to/page.html', outputPath: 'screenshots/out.png' });
+```
+
+The VP `shell` tool also recognizes `npx playwright screenshot` as a safe (non-mutating) command.
 
 ## Tests
 
