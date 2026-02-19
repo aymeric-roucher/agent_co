@@ -24,6 +24,6 @@ export class Tracker {
 
   logStep(toolCalls: unknown[]): void {
     if (toolCalls.length === 0) return;
-    this.logEvent('agent_step', { toolCalls });
+    this.logEvent('vp_step', { toolCalls });
   }
 }

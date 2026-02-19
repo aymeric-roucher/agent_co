@@ -2,23 +2,24 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import type { DepartmentConfig, CompanyConfig } from '../config.js';
 import type { Tracker } from '../tracker.js';
-import type { WorkerHandle, WorkerEvent } from '../workers/types.js';
-import type { EventQueue } from '../event-queue.js';
+import type { WorkerSession } from '../workers/types.js';
+import type { CodexMCPClient } from '../workers/mcp-client.js';
 import { createWorktree, removeWorktree } from '../git.js';
-import { spawnClaudeCode } from '../workers/claude-code.js';
-import { spawnCodex } from '../workers/codex.js';
 
 export interface VPState {
   config: DepartmentConfig;
   companyConfig: CompanyConfig;
   tracker: Tracker;
-  workers: Map<string, WorkerHandle>;
-  eventQueue: EventQueue<WorkerEvent>;
+  mcpClient: CodexMCPClient;
+  sessions: Map<string, WorkerSession>;
+  done: boolean;
   departmentDir: string;
   companyDir: string;
+  log: (msg: string) => void;
 }
 
 function bootstrapWorkerInstructions(state: VPState): string {
@@ -44,54 +45,54 @@ function bootstrapWorkerInstructions(state: VPState): string {
 
 export function createVPTools(state: VPState) {
   return {
-    spawn_worker: tool({
-      description: 'Spawn a new coding agent worker on a git branch',
+    start_worker: tool({
+      description: 'Start a new coding worker on a git branch. Returns the worker\'s first response.',
       inputSchema: z.object({
         task: z.string().describe('Task description for the worker'),
         branch_name: z.string().describe('Git branch name'),
       }),
       execute: async ({ task, branch_name }) => {
+        const MAX_WORKERS = 2;
+        const active = [...state.sessions.values()].filter((s) => s.status === 'active').length;
+        if (active >= MAX_WORKERS) {
+          throw new Error(`Cannot start worker: already ${active} active workers (max ${MAX_WORKERS}). Use continue_worker or kill_worker first.`);
+        }
+
+        state.log(`[tool:start_worker] Creating worktree for branch ${branch_name}...`);
         const worktreePath = createWorktree(state.companyConfig.repo, branch_name);
 
-        // Write bootstrap instructions into the worktree
         const instructions = bootstrapWorkerInstructions(state);
         writeFileSync(path.join(worktreePath, 'CLAUDE.md'), instructions);
 
-        const handle = state.companyConfig.worker_type === 'claude_code'
-          ? spawnClaudeCode(worktreePath, branch_name, task, state.eventQueue)
-          : spawnCodex(worktreePath, branch_name, task, state.eventQueue);
+        const id = randomUUID().slice(0, 8);
 
-        state.workers.set(handle.id, handle);
-        state.tracker.logEvent('worker_spawned', { id: handle.id, branch: branch_name, task });
-        return `Worker ${handle.id} spawned on branch ${branch_name}`;
+        state.log(`[tool:start_worker] Worktree ready. Starting MCP session...`);
+        const { threadId, content } = await state.mcpClient.startSession(task, worktreePath);
+
+        const session: WorkerSession = { id, branch: branch_name, worktreePath, threadId, status: 'active' };
+        state.sessions.set(id, session);
+        state.tracker.logEvent('worker_started', { id, branch: branch_name, task });
+
+        return `Worker ${id} started on branch ${branch_name}.\n\nWorker response:\n${content}`;
       },
     }),
 
-    check_worker: tool({
-      description: 'Check status and recent output of a worker',
+    continue_worker: tool({
+      description: 'Send a follow-up message to a running worker and get its response.',
       inputSchema: z.object({
-        worker_id: z.string(),
-      }),
-      execute: async ({ worker_id }) => {
-        const w = state.workers.get(worker_id);
-        if (!w) return `Worker ${worker_id} not found`;
-        const tail = w.outputBuffer.slice(-2000);
-        return `Status: ${w.status}\nBranch: ${w.branch}\nRecent output:\n${tail}`;
-      },
-    }),
-
-    send_to_worker: tool({
-      description: 'Send a message to a running worker via stdin',
-      inputSchema: z.object({
-        worker_id: z.string(),
-        message: z.string(),
+        worker_id: z.string().describe('Worker ID'),
+        message: z.string().describe('Message to send to the worker'),
       }),
       execute: async ({ worker_id, message }) => {
-        const w = state.workers.get(worker_id);
-        if (!w) return `Worker ${worker_id} not found`;
-        if (w.status !== 'running') return `Worker ${worker_id} is ${w.status}`;
-        w.process.stdin?.write(message + '\n');
-        return `Message sent to worker ${worker_id}`;
+        const session = state.sessions.get(worker_id);
+        if (!session) return `Worker ${worker_id} not found`;
+        if (session.status !== 'active') return `Worker ${worker_id} is ${session.status}`;
+
+        state.log(`[tool:continue_worker] Sending to worker ${worker_id}...`);
+        const { content } = await state.mcpClient.continueSession(session.threadId, message);
+        state.tracker.logEvent('worker_continued', { id: worker_id });
+
+        return `Worker ${worker_id} response:\n${content}`;
       },
     }),
 
@@ -101,11 +102,10 @@ export function createVPTools(state: VPState) {
         worker_id: z.string(),
       }),
       execute: async ({ worker_id }) => {
-        const w = state.workers.get(worker_id);
-        if (!w) return `Worker ${worker_id} not found`;
-        w.process.kill('SIGTERM');
-        try { removeWorktree(state.companyConfig.repo, w.worktreePath); } catch { /* already cleaned */ }
-        w.status = 'failed';
+        const session = state.sessions.get(worker_id);
+        if (!session) return `Worker ${worker_id} not found`;
+        try { removeWorktree(state.companyConfig.repo, session.worktreePath); } catch { /* already cleaned */ }
+        session.status = 'done';
         state.tracker.logEvent('worker_killed', { id: worker_id });
         return `Worker ${worker_id} killed`;
       },
@@ -115,19 +115,29 @@ export function createVPTools(state: VPState) {
       description: 'List all workers and their status',
       inputSchema: z.object({}),
       execute: async () => {
-        if (state.workers.size === 0) return 'No workers';
-        const lines = [...state.workers.values()].map(
-          (w) => `${w.id} | ${w.branch} | ${w.status} | ${w.workerType}`
+        if (state.sessions.size === 0) return 'No workers';
+        const lines = [...state.sessions.values()].map(
+          (s) => `${s.id} | ${s.branch} | ${s.status} | thread:${s.threadId}`
         );
-        return ['ID | Branch | Status | Type', ...lines].join('\n');
+        return ['ID | Branch | Status | Thread', ...lines].join('\n');
+      },
+    }),
+
+    mark_done: tool({
+      description: 'Signal that all work is complete. Call this when the department\'s goals are met.',
+      inputSchema: z.object({
+        summary: z.string().describe('Final summary of what was accomplished'),
+      }),
+      execute: async ({ summary }) => {
+        state.done = true;
+        state.tracker.logEvent('vp_done', { summary });
+        return `VP marked done. Summary: ${summary}`;
       },
     }),
 
     update_work_log: tool({
       description: 'Append an entry to WORK.md',
-      inputSchema: z.object({
-        entry: z.string(),
-      }),
+      inputSchema: z.object({ entry: z.string() }),
       execute: async ({ entry }) => {
         const workPath = path.join(state.departmentDir, 'WORK.md');
         const ts = new Date().toISOString().slice(0, 19);

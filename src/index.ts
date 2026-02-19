@@ -4,7 +4,9 @@ import { loadConfig, ensureDepartmentDirs } from './config.js';
 import { runVP } from './vp/loop.js';
 import { runSecretary } from './secretary.js';
 import { readFileSync, existsSync } from 'fs';
+import { execSync } from 'child_process';
 import path from 'path';
+import { listWorktrees, removeWorktree } from './git.js';
 
 const program = new Command();
 program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
@@ -57,6 +59,104 @@ program
       }
       console.log(`  ${dept.slug} | work: ${hasWork ? 'yes' : 'no'} | last: ${lastEvent}`);
     }
+  });
+
+program
+  .command('stop <slug>')
+  .description('Stop a running VP daemon for a department')
+  .action((slug: string) => {
+    const config = loadConfig();
+    const dept = config.departments.find((d) => d.slug === slug);
+    if (!dept) {
+      console.error(`Department "${slug}" not found. Available: ${config.departments.map((d) => d.slug).join(', ')}`);
+      process.exit(1);
+    }
+
+    try {
+      const psOutput = execSync(`ps aux | grep "start ${slug}" | grep -v grep`, {
+        encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+
+      if (!psOutput) { console.log(`No running VP found for "${slug}"`); process.exit(0); }
+
+      const pids = psOutput.split('\n').map(line => line.trim().split(/\s+/)[1]);
+      for (const pid of pids) {
+        try { execSync(`kill ${pid}`, { stdio: 'pipe' }); } catch { /* already dead */ }
+      }
+      console.log(`✓ VP stopped for "${slug}" (PIDs: ${pids.join(', ')})`);
+    } catch (err) {
+      if ((err as any).status === 1) { console.log(`No running VP found for "${slug}"`); }
+      else { console.error(`Error: ${err instanceof Error ? err.message : String(err)}`); process.exit(1); }
+    }
+  });
+
+program
+  .command('logs [slug]')
+  .description('Show VP or worker logs')
+  .option('-f, --follow', 'Follow logs in real-time')
+  .option('-n, --lines <number>', 'Number of lines to show', '50')
+  .option('-w, --workers', 'Show worker logs instead of VP logs')
+  .action((slug: string | undefined, options: { follow?: boolean; lines?: string; workers?: boolean }) => {
+    if (options.workers) {
+      const logsDir = path.join('company', 'logs', 'workers');
+      if (!existsSync(logsDir)) { console.log('No worker logs yet.'); process.exit(0); }
+      const files = execSync(`ls -t "${logsDir}"/*.log 2>/dev/null || true`, { encoding: 'utf-8' }).trim();
+      if (!files) { console.log('No worker logs yet.'); process.exit(0); }
+      const latestLog = files.split('\n')[0];
+      console.log(`Showing: ${path.basename(latestLog)}\n`);
+      if (options.follow) execSync(`tail -f "${latestLog}"`, { stdio: 'inherit' });
+      else console.log(execSync(`tail -n ${options.lines} "${latestLog}"`, { encoding: 'utf-8' }));
+    } else {
+      if (!slug) { console.error('Usage: vp logs <slug>'); process.exit(1); }
+      const vpLogPath = path.join('company', 'logs', slug, 'vp-output.log');
+      if (!existsSync(vpLogPath)) { console.log(`No VP logs yet for "${slug}".`); process.exit(0); }
+      if (options.follow) execSync(`tail -f "${vpLogPath}"`, { stdio: 'inherit' });
+      else console.log(execSync(`tail -n ${options.lines} "${vpLogPath}"`, { encoding: 'utf-8' }));
+    }
+  });
+
+program
+  .command('reset <slug>')
+  .description('Reset a department by wiping all memory')
+  .option('-f, --force', 'Skip confirmation prompt')
+  .action((slug: string, options: { force?: boolean }) => {
+    const config = loadConfig();
+    const dept = config.departments.find((d) => d.slug === slug);
+    if (!dept) {
+      console.error(`Department "${slug}" not found. Available: ${config.departments.map((d) => d.slug).join(', ')}`);
+      process.exit(1);
+    }
+
+    const deptDir = path.join('company', 'workspaces', dept.slug);
+    const logsDir = path.join('company', 'logs', dept.slug);
+    const filesToDelete = [
+      path.join(deptDir, 'VP_LOGS.md'), path.join(deptDir, 'DOC.md'), path.join(deptDir, 'WORK.md'),
+      path.join(logsDir, 'events.jsonl'), path.join(logsDir, 'vp-output.log'), path.join(logsDir, 'work-snapshots'),
+      path.join(deptDir, 'plans'), path.join(deptDir, 'prds'),
+    ];
+
+    const existing = filesToDelete.filter(f => existsSync(f));
+    if (existing.length === 0) { console.log(`Nothing to reset for "${slug}".`); process.exit(0); }
+
+    console.log(`\nWill delete for "${slug}":\n${existing.map(f => `  - ${f}`).join('\n')}`);
+    if (!options.force) { console.log(`\nRun with --force to confirm.`); process.exit(0); }
+
+    for (const file of existing) execSync(`rm -rf "${file}"`, { stdio: 'pipe' });
+
+    // Clean up worktrees created by this department's workers
+    const mainBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: config.repo, encoding: 'utf-8' }).trim();
+    const worktrees = listWorktrees(config.repo);
+    for (const wt of worktrees) {
+      if (wt.branch !== mainBranch && wt.path !== config.repo) {
+        try {
+          removeWorktree(config.repo, wt.path);
+          execSync(`git branch -D "${wt.branch}"`, { cwd: config.repo, stdio: 'pipe' });
+          console.log(`  Removed worktree: ${wt.branch}`);
+        } catch { /* already cleaned */ }
+      }
+    }
+
+    console.log(`\n✓ Memory wiped for "${slug}". Run 'vp start ${slug}' to begin fresh.`);
   });
 
 program.parse();

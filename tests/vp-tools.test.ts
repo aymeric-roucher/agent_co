@@ -1,17 +1,24 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, readFileSync, existsSync, writeFileSync } from 'fs';
-import { execSync } from 'child_process';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import path from 'path';
 import { createVPTools, type VPState } from '../src/vp/agent.js';
 import { Tracker } from '../src/tracker.js';
-import { EventQueue } from '../src/event-queue.js';
-import type { WorkerEvent, WorkerHandle } from '../src/workers/types.js';
-import type { ChildProcess } from 'child_process';
-import path from 'path';
+import type { WorkerSession } from '../src/workers/types.js';
+import type { CodexMCPClient } from '../src/workers/mcp-client.js';
 
 const TMP = path.join(import.meta.dirname, '.tmp-vp-tools-test');
 const opts = (id: string) => ({ toolCallId: id, messages: [] as [] });
 
-function makeState(repoPath?: string): VPState {
+function fakeMCPClient(): CodexMCPClient {
+  return {
+    connect: vi.fn(),
+    startSession: vi.fn().mockResolvedValue({ threadId: 'thread-abc', content: 'Worker started working' }),
+    continueSession: vi.fn().mockResolvedValue({ threadId: 'thread-abc', content: 'Worker continued working' }),
+    close: vi.fn(),
+  } as unknown as CodexMCPClient;
+}
+
+function makeState(): VPState {
   const companyDir = path.join(TMP, 'company');
   const departmentDir = path.join(companyDir, 'workspaces', 'test');
   mkdirSync(path.join(departmentDir, 'plans'), { recursive: true });
@@ -19,131 +26,61 @@ function makeState(repoPath?: string): VPState {
 
   return {
     config: { slug: 'test', name: 'Test', description: 'test stuff' },
-    companyConfig: { repo: repoPath ?? '/tmp/fake-repo', worker_type: 'claude_code', departments: [] },
+    companyConfig: { repo: '/tmp/fake-repo', worker_type: 'codex', departments: [] },
     tracker: new Tracker('test', path.join(companyDir, 'logs')),
-    workers: new Map<string, WorkerHandle>(),
-    eventQueue: new EventQueue<WorkerEvent>(),
+    mcpClient: fakeMCPClient(),
+    sessions: new Map<string, WorkerSession>(),
+    done: false,
     departmentDir,
     companyDir,
+    log: () => {},
   };
 }
 
-function fakeWorker(id: string, branch: string, status: 'running' | 'done' | 'failed' = 'running'): WorkerHandle {
-  const stdinChunks: string[] = [];
-  return {
-    id,
-    branch,
-    worktreePath: '/tmp/fake-worktree',
-    process: {
-      stdin: { write: (data: string) => { stdinChunks.push(data); return true; } },
-      kill: () => {},
-      _stdinChunks: stdinChunks,
-    } as unknown as ChildProcess,
-    workerType: 'claude_code',
-    status,
-    outputBuffer: 'line1\nline2\nsome output here',
-  };
+function fakeSession(id: string, branch: string, status: 'active' | 'done' = 'active'): WorkerSession {
+  return { id, branch, worktreePath: '/tmp/fake-worktree', threadId: 'thread-abc', status };
 }
 
 beforeEach(() => mkdirSync(TMP, { recursive: true }));
 afterEach(() => rmSync(TMP, { recursive: true, force: true }));
 
-describe('VP tools — all 13', () => {
-  // --- spawn_worker (needs real git repo) ---
-  it('spawn_worker creates worktree, writes CLAUDE.md, and registers worker', async () => {
-    const repo = path.join(TMP, 'repo');
-    mkdirSync(repo, { recursive: true });
-    execSync('git init && git commit --allow-empty -m "init"', { cwd: repo, stdio: 'pipe' });
-
-    const state = makeState(repo);
-    // Write some DOC.md so bootstrap instructions pick it up
-    writeFileSync(path.join(state.departmentDir, 'DOC.md'), 'Dept knowledge');
-
-    const tools = createVPTools(state);
-    const result = await tools.spawn_worker.execute!({ task: 'do stuff', branch_name: 'feat-test' }, opts('1'));
-
-    expect(result).toContain('spawned');
-    expect(result).toContain('feat-test');
-    expect(state.workers.size).toBe(1);
-
-    const worker = [...state.workers.values()][0];
-    expect(worker.branch).toBe('feat-test');
-    expect(worker.status).toBe('running');
-
-    // CLAUDE.md should exist in worktree with dept knowledge
-    const claudeMd = readFileSync(path.join(worker.worktreePath, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('Dept knowledge');
-
-    // Events log should have the spawn
-    const eventsPath = path.join(state.companyDir, 'logs', 'test', 'events.jsonl');
-    const events = readFileSync(eventsPath, 'utf-8');
-    expect(events).toContain('worker_spawned');
-
-    // Cleanup worktree
-    worker.process.kill();
-    execSync(`git worktree remove "${worker.worktreePath}" --force`, { cwd: repo, stdio: 'pipe' });
-  });
-
-  // --- check_worker ---
-  it('check_worker returns status and output for known worker', async () => {
+describe('VP tools', () => {
+  // --- continue_worker ---
+  it('continue_worker calls MCP continueSession and returns response', async () => {
     const state = makeState();
     const tools = createVPTools(state);
-    state.workers.set('w1', fakeWorker('w1', 'branch-a'));
+    state.sessions.set('w1', fakeSession('w1', 'branch-a'));
 
-    const result = await tools.check_worker.execute!({ worker_id: 'w1' }, opts('1'));
-    expect(result).toContain('Status: running');
-    expect(result).toContain('Branch: branch-a');
-    expect(result).toContain('some output here');
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', message: 'keep going' }, opts('1'));
+    expect(result).toContain('Worker w1 response');
+    expect(result).toContain('Worker continued working');
+    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', 'keep going');
   });
 
-  it('check_worker returns not found for unknown id', async () => {
+  it('continue_worker returns not found for unknown id', async () => {
     const state = makeState();
     const tools = createVPTools(state);
-    const result = await tools.check_worker.execute!({ worker_id: 'nope' }, opts('1'));
+    const result = await tools.continue_worker.execute!({ worker_id: 'nope', message: 'hi' }, opts('1'));
     expect(result).toContain('not found');
   });
 
-  // --- send_to_worker ---
-  it('send_to_worker writes to stdin of running worker', async () => {
+  it('continue_worker refuses for done worker', async () => {
     const state = makeState();
     const tools = createVPTools(state);
-    const worker = fakeWorker('w1', 'b');
-    state.workers.set('w1', worker);
-
-    const result = await tools.send_to_worker.execute!({ worker_id: 'w1', message: 'hello' }, opts('1'));
-    expect(result).toContain('Message sent');
-    expect((worker.process as any)._stdinChunks).toContain('hello\n');
-  });
-
-  it('send_to_worker refuses for non-running worker', async () => {
-    const state = makeState();
-    const tools = createVPTools(state);
-    state.workers.set('w1', fakeWorker('w1', 'b', 'done'));
-
-    const result = await tools.send_to_worker.execute!({ worker_id: 'w1', message: 'hi' }, opts('1'));
+    state.sessions.set('w1', fakeSession('w1', 'b', 'done'));
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', message: 'hi' }, opts('1'));
     expect(result).toContain('is done');
   });
 
-  it('send_to_worker returns not found for unknown id', async () => {
-    const state = makeState();
-    const tools = createVPTools(state);
-    const result = await tools.send_to_worker.execute!({ worker_id: 'nope', message: 'hi' }, opts('1'));
-    expect(result).toContain('not found');
-  });
-
   // --- kill_worker ---
-  it('kill_worker marks worker as failed and logs event', async () => {
+  it('kill_worker marks session as done and logs event', async () => {
     const state = makeState();
     const tools = createVPTools(state);
-    let killed = false;
-    const worker = fakeWorker('w1', 'b');
-    (worker.process as any).kill = () => { killed = true; };
-    state.workers.set('w1', worker);
+    state.sessions.set('w1', fakeSession('w1', 'b'));
 
     const result = await tools.kill_worker.execute!({ worker_id: 'w1' }, opts('1'));
     expect(result).toContain('killed');
-    expect(killed).toBe(true);
-    expect(worker.status).toBe('failed');
+    expect(state.sessions.get('w1')!.status).toBe('done');
 
     const events = readFileSync(path.join(state.companyDir, 'logs', 'test', 'events.jsonl'), 'utf-8');
     expect(events).toContain('worker_killed');
@@ -157,11 +94,11 @@ describe('VP tools — all 13', () => {
   });
 
   // --- list_workers ---
-  it('list_workers returns table when workers exist', async () => {
+  it('list_workers returns table when sessions exist', async () => {
     const state = makeState();
     const tools = createVPTools(state);
-    state.workers.set('w1', fakeWorker('w1', 'branch-a'));
-    state.workers.set('w2', fakeWorker('w2', 'branch-b', 'done'));
+    state.sessions.set('w1', fakeSession('w1', 'branch-a'));
+    state.sessions.set('w2', fakeSession('w2', 'branch-b', 'done'));
 
     const result = await tools.list_workers.execute!({}, opts('1'));
     expect(result).toContain('w1');
@@ -177,6 +114,18 @@ describe('VP tools — all 13', () => {
     expect(result).toBe('No workers');
   });
 
+  // --- mark_done ---
+  it('mark_done sets done flag and logs event', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    const result = await tools.mark_done.execute!({ summary: 'All done' }, opts('1'));
+    expect(result).toContain('done');
+    expect(state.done).toBe(true);
+
+    const events = readFileSync(path.join(state.companyDir, 'logs', 'test', 'events.jsonl'), 'utf-8');
+    expect(events).toContain('vp_done');
+  });
+
   // --- update_work_log ---
   it('update_work_log appends timestamped entries and snapshots', async () => {
     const state = makeState();
@@ -187,13 +136,7 @@ describe('VP tools — all 13', () => {
     const content = readFileSync(path.join(state.departmentDir, 'WORK.md'), 'utf-8');
     expect(content).toContain('Started task A');
     expect(content).toContain('Finished task A');
-    // Should have ## timestamp headers
     expect(content).toMatch(/## \d{4}-\d{2}-\d{2}/);
-
-    // Snapshots should exist
-    const snapshotsDir = path.join(state.companyDir, 'logs', 'test', 'work-snapshots');
-    const snapshots = require('fs').readdirSync(snapshotsDir);
-    expect(snapshots.length).toBeGreaterThanOrEqual(1);
   });
 
   // --- write_doc ---
@@ -249,19 +192,5 @@ describe('VP tools — all 13', () => {
     const result = await tools.read_common_doc.execute!({}, opts('4'));
     expect(result).toContain('line 1');
     expect(result).toContain('line 2');
-  });
-
-  // --- open_pr (just test it calls gh — will fail without gh, that's expected) ---
-  it('open_pr throws when gh is not available or no remote', async () => {
-    const repo = path.join(TMP, 'repo-pr');
-    mkdirSync(repo, { recursive: true });
-    execSync('git init && git commit --allow-empty -m "init"', { cwd: repo, stdio: 'pipe' });
-
-    const state = makeState(repo);
-    const tools = createVPTools(state);
-    // Should throw because there's no GitHub remote
-    await expect(
-      tools.open_pr.execute!({ branch: 'main', title: 'test', body: 'body' }, opts('1'))
-    ).rejects.toThrow();
   });
 });

@@ -18,7 +18,7 @@ const CompanyConfigSchema = z.object({
 export type DepartmentConfig = z.infer<typeof DepartmentSchema>;
 export type CompanyConfig = z.infer<typeof CompanyConfigSchema>;
 
-export const DEFAULT_MODEL = 'gpt-5.2';
+export const DEFAULT_MODEL = 'gpt-5-mini';
 export const COMPANY_DIR = 'company';
 export const CONFIG_PATH = path.join(COMPANY_DIR, 'config.yaml');
 

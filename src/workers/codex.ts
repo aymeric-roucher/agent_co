@@ -10,7 +10,7 @@ export function spawnCodex(
   eventQueue: EventQueue<WorkerEvent>,
 ): WorkerHandle {
   const id = randomUUID().slice(0, 8);
-  const proc = spawn('codex', ['-q', prompt, '--approval-mode', 'full-auto'], {
+  const proc = spawn('codex', ['exec', '--full-auto', prompt], {
     cwd: worktreePath,
     stdio: ['pipe', 'pipe', 'pipe'],
   });

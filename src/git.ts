@@ -10,6 +10,19 @@ export interface WorktreeInfo {
 export function createWorktree(repo: string, branch: string): string {
   const worktreeBase = path.join(repo, '..', 'worktrees');
   const worktreePath = path.join(worktreeBase, branch);
+  // Clean up stale branch/worktree from previous runs
+  const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: repo, encoding: 'utf-8' }).trim();
+  if (branch !== currentBranch) {
+    const worktrees = listWorktrees(repo);
+    const existing = worktrees.find(w => w.branch === branch);
+    if (existing) {
+      execSync(`git worktree remove "${existing.path}" --force`, { cwd: repo, stdio: 'pipe' });
+    }
+    const branches = execSync('git branch --list', { cwd: repo, encoding: 'utf-8' });
+    if (branches.split('\n').some(b => b.trim() === branch)) {
+      execSync(`git branch -D ${branch}`, { cwd: repo, stdio: 'pipe' });
+    }
+  }
   execSync(`git worktree add -b ${branch} "${worktreePath}"`, { cwd: repo, stdio: 'pipe' });
   return worktreePath;
 }
