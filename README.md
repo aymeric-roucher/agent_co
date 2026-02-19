@@ -32,7 +32,7 @@ No `--dangerously-skip-permissions`. No `--allowedTools`. The VP approves each a
 
 ## Stack
 
-TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Commander CLI, Zod 4, YAML config.
+TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Playwright (screenshots), Commander CLI, Zod 4, YAML config.
 
 ## File Structure
 

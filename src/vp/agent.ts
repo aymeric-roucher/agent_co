@@ -11,6 +11,7 @@ import type { WorkerSession } from '../workers/types.js';
 import type { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createWorktree, removeWorktree } from '../git.js';
 import { readFileContent, isImageFile } from './read-file.js';
+import { takeScreenshot, fileUrl } from './screenshot.js';
 
 export interface PendingImage {
   base64: string;
@@ -178,6 +179,33 @@ export function createVPTools(state: VPState) {
           ? { anchorLine: anchor_line, maxLevels: max_levels ?? 0, includeSiblings: include_siblings ?? false, includeHeader: true }
           : undefined;
         return readFileContent(content, { filePath: file_path, offset, limit, mode, indentation });
+      },
+    }),
+
+    take_screenshot: tool({
+      description: 'Take a Playwright screenshot of an HTML file. Returns the screenshot path and queues the image for visual inspection.',
+      inputSchema: z.object({
+        html_path: z.string().describe('Absolute path to the HTML file'),
+        output_path: z.string().describe('Absolute path for the output PNG'),
+        width: z.number().optional().describe('Viewport width (default 1280)'),
+        height: z.number().optional().describe('Viewport height (default 720)'),
+        full_page: z.boolean().optional().describe('Capture full page (default true)'),
+      }),
+      execute: async ({ html_path, output_path, width, height, full_page }) => {
+        if (!existsSync(html_path)) throw new Error(`HTML file not found: ${html_path}`);
+
+        state.log(`[tool:take_screenshot] Capturing ${html_path} → ${output_path}`);
+        const result = await takeScreenshot(fileUrl(html_path), output_path, {
+          width,
+          height,
+          fullPage: full_page,
+        });
+
+        // Queue the screenshot for visual inspection
+        const buf = readFileSync(output_path);
+        state.pendingImages.push({ base64: buf.toString('base64'), mimeType: 'image/png', filePath: output_path });
+
+        return `Screenshot saved: ${result.outputPath} (${result.bytes} bytes) — will be shown in next message for visual inspection.`;
       },
     }),
 
