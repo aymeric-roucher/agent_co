@@ -25,6 +25,7 @@ const SAFE_COMMAND_PREFIXES = [
   'node --version', 'npm --version', 'npx --version',
   'python --version', 'python3 --version',
   'env', 'printenv',
+  'npx playwright screenshot',
 ];
 
 // ── Types (mirrors ExecParams / ShellToolCallParams / ShellCommandToolCallParams) ──
