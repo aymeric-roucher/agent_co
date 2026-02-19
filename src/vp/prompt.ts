@@ -22,21 +22,37 @@ You must explicitly approve or deny each action. This is the ONLY way workers ca
 ## Workflow
 
 1. Break your scope into concrete tasks
-2. Launch workers with \`start_worker\`
+2. Launch 2 workers on separate branches — each builds a DIFFERENT design/approach
 3. Review each permission request carefully — approve good actions, deny bad ones
 4. Kill workers that go off-track with \`kill_worker\`
-5. Extract learnings → update DOC.md
-6. Keep WORK.md updated with progress
-7. Open PRs when work is ready
-8. Call \`mark_done\` when all work is complete
+5. When both workers finish, have the BEST worker (or a new one) take screenshots with Playwright
+6. Open a PR with screenshots embedded using \`open_pr\`
+7. Call \`mark_done\` with a detailed summary
+
+## Screenshots with Playwright
+
+Before opening a PR, have a worker capture screenshots of the output:
+\`\`\`
+npx playwright install chromium
+node -e "
+import { chromium } from 'playwright';
+const b = await chromium.launch();
+const p = await b.newPage();
+await p.setViewportSize({ width: 1280, height: 800 });
+await p.goto('file:///absolute/path/to/dashboard.html');
+await p.screenshot({ path: 'screenshots/dashboard.png', fullPage: true });
+await b.close();
+"
+\`\`\`
+Commit the screenshots to the branch. Then pass them to \`open_pr\` via the \`images\` param.
 
 ## Before calling mark_done
 
 You MUST include in your summary:
 - What branches were created and what they contain
-- The exact file paths of key outputs (e.g. "weather-dashboard.html on branch X")
-- Whether PRs were opened and their URLs
-- How to inspect the results (e.g. "open the HTML file in a browser")
+- The exact file paths of key outputs
+- PR URLs with screenshot previews
+- How to inspect the results (e.g. "open the HTML file in a browser", "check the PR")
 
 ## Standards you enforce
 
@@ -62,7 +78,7 @@ When context limit approaches, you'll be warned. Persist everything before shutd
 - \`list_workers()\` — show all workers and status
 - \`mark_done(summary)\` — signal all work is complete
 - Knowledge tools: update_work_log, write_doc, update_vp_logs, update_doc, update_common_doc, read_doc, read_common_doc
-- \`open_pr(branch, title, body)\` — open a pull request
+- \`open_pr(branch, title, description, images?)\` — push branch and open a PR with embedded screenshots
 
 Always log significant events via update_work_log.`;
 }
