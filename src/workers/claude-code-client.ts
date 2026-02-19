@@ -72,8 +72,8 @@ export class ClaudeCodeClient {
 
   async continueSession(threadId: string, approve: boolean, message?: string): Promise<{ threadId: string; content: string }> {
     const session = this.sessions.get(threadId);
-    if (!session) throw new Error(`Session ${threadId} not found`);
-    if (!session.pendingPermission) throw new Error(`No pending permission for session ${threadId}`);
+    if (!session) throw new Error(`Session not found: ${threadId}`);
+    if (!session.pendingPermission) throw new Error(`No pending permission for session: ${threadId}`);
 
     const pending = session.pendingPermission;
     session.pendingPermission = null;
@@ -114,7 +114,8 @@ export class ClaudeCodeClient {
     } catch (err) {
       const text = session.collectedText.join('\n');
       session.collectedText = [];
-      this.pushBlock(session, `${text}\n\n**ERROR:** ${err}`);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.pushBlock(session, `${text}\n\n**Error:** ${errMsg}`);
     }
 
     session.finished = true;
@@ -141,7 +142,7 @@ export class ClaudeCodeClient {
         this.log(`[claude-code] session completed (cost: $${cost?.toFixed(4) ?? '?'})`);
         this.pushBlock(session, `${text}\n\n**DONE.** Final result:\n${msg.result}`);
       } else {
-        this.pushBlock(session, `${text}\n\n**ERROR:** ${(msg as any).subtype}`);
+        this.pushBlock(session, `${text}\n\n**Error:** Session failed with: ${(msg as any).subtype}`);
       }
     } else if (msg.type === 'tool_use_summary') {
       session.collectedText.push(`[Tool: ${(msg as any).summary}]`);

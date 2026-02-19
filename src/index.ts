@@ -1,12 +1,28 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { loadConfig, ensureDepartmentDirs } from './config.js';
+import { loadConfig, ensureDepartmentDirs, type CompanyConfig } from './config.js';
 import { runVP } from './vp/loop.js';
 import { runSecretary } from './secretary.js';
 import { readFileSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
 import { listWorktrees, removeWorktree } from './git.js';
+
+/** Print a consistent error and exit. */
+export function cliError(message: string): never {
+  console.error(`Error: ${message}`);
+  process.exit(1);
+}
+
+/** Resolve a department by slug or error with available slugs. */
+export function requireDepartment(config: CompanyConfig, slug: string) {
+  const dept = config.departments.find((d) => d.slug === slug);
+  if (!dept) {
+    const available = config.departments.map((d) => d.slug).join(', ');
+    cliError(`Department "${slug}" not found. Available: ${available || '(none)'}`);
+  }
+  return dept;
+}
 
 const program = new Command();
 program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
@@ -23,11 +39,7 @@ program
   .description('Start a VP daemon for a department')
   .action(async (slug: string) => {
     const config = loadConfig();
-    const dept = config.departments.find((d) => d.slug === slug);
-    if (!dept) {
-      console.error(`Department "${slug}" not found. Available: ${config.departments.map((d) => d.slug).join(', ')}`);
-      process.exit(1);
-    }
+    const dept = requireDepartment(config, slug);
     ensureDepartmentDirs(config);
     await runVP(dept, config);
   });
@@ -66,18 +78,14 @@ program
   .description('Stop a running VP daemon for a department')
   .action((slug: string) => {
     const config = loadConfig();
-    const dept = config.departments.find((d) => d.slug === slug);
-    if (!dept) {
-      console.error(`Department "${slug}" not found. Available: ${config.departments.map((d) => d.slug).join(', ')}`);
-      process.exit(1);
-    }
+    requireDepartment(config, slug);
 
     try {
       const psOutput = execSync(`ps aux | grep "start ${slug}" | grep -v grep`, {
         encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
 
-      if (!psOutput) { console.log(`No running VP found for "${slug}"`); process.exit(0); }
+      if (!psOutput) { console.log(`No running VP found for "${slug}".`); process.exit(0); }
 
       const pids = psOutput.split('\n').map(line => line.trim().split(/\s+/)[1]);
       for (const pid of pids) {
@@ -85,8 +93,8 @@ program
       }
       console.log(`✓ VP stopped for "${slug}" (PIDs: ${pids.join(', ')})`);
     } catch (err) {
-      if ((err as any).status === 1) { console.log(`No running VP found for "${slug}"`); }
-      else { console.error(`Error: ${err instanceof Error ? err.message : String(err)}`); process.exit(1); }
+      if ((err as any).status === 1) { console.log(`No running VP found for "${slug}".`); }
+      else { cliError(err instanceof Error ? err.message : String(err)); }
     }
   });
 
@@ -107,7 +115,7 @@ program
       if (options.follow) execSync(`tail -f "${latestLog}"`, { stdio: 'inherit' });
       else console.log(execSync(`tail -n ${options.lines} "${latestLog}"`, { encoding: 'utf-8' }));
     } else {
-      if (!slug) { console.error('Usage: vp logs <slug>'); process.exit(1); }
+      if (!slug) cliError('Missing argument: slug. Usage: vp logs <slug>');
       const vpLogPath = path.join('company', 'logs', slug, 'vp-output.log');
       if (!existsSync(vpLogPath)) { console.log(`No VP logs yet for "${slug}".`); process.exit(0); }
       if (options.follow) execSync(`tail -f "${vpLogPath}"`, { stdio: 'inherit' });
@@ -121,11 +129,7 @@ program
   .option('-f, --force', 'Skip confirmation prompt')
   .action((slug: string, options: { force?: boolean }) => {
     const config = loadConfig();
-    const dept = config.departments.find((d) => d.slug === slug);
-    if (!dept) {
-      console.error(`Department "${slug}" not found. Available: ${config.departments.map((d) => d.slug).join(', ')}`);
-      process.exit(1);
-    }
+    const dept = requireDepartment(config, slug);
 
     const deptDir = path.join('company', 'workspaces', dept.slug);
     const logsDir = path.join('company', 'logs', dept.slug);
