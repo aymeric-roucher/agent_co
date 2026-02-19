@@ -193,4 +193,32 @@ describe('VP tools', () => {
     expect(result).toContain('line 1');
     expect(result).toContain('line 2');
   });
+
+  // --- continue_worker: dead session auto-marks done ---
+  it('continue_worker marks worker done when session throws', async () => {
+    const state = makeState();
+    (state.mcpClient.continueSession as any).mockRejectedValue(new Error('No pending permission for session xyz'));
+    const tools = createVPTools(state);
+    state.sessions.set('w1', fakeSession('w1', 'feat-branch'));
+
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', approve: true }, opts('1'));
+    expect(result).toContain('finished');
+    expect(result).toContain('feat-branch');
+    expect(state.sessions.get('w1')!.status).toBe('done');
+  });
+
+  // --- continue_worker: detects DONE in response ---
+  it('continue_worker auto-marks done when response contains DONE marker', async () => {
+    const state = makeState();
+    (state.mcpClient.continueSession as any).mockResolvedValue({
+      threadId: 'thread-abc',
+      content: 'All tasks completed.\n\n**DONE.** Final result:\nEverything works.',
+    });
+    const tools = createVPTools(state);
+    state.sessions.set('w1', fakeSession('w1', 'branch-x'));
+
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', approve: true }, opts('1'));
+    expect(result).toContain('DONE');
+    expect(state.sessions.get('w1')!.status).toBe('done');
+  });
 });

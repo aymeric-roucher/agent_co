@@ -147,9 +147,18 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
 
       if (totalTokens > TOKEN_LIMIT) {
         log(`\n## Context limit (${totalTokens} tokens). Restarting...`);
+
+        // Build worker summary for the save phase
+        const workerLines = [...state.sessions.values()].map(
+          (s) => `- Worker ${s.id} | branch: ${s.branch} | status: ${s.status} | worktree: ${s.worktreePath}`,
+        );
+        const workerSummary = workerLines.length > 0
+          ? `\n\nActive workers:\n${workerLines.join('\n')}`
+          : '\n\nNo active workers.';
+
         messages.push({
           role: 'user',
-          content: 'CONTEXT LIMIT APPROACHING. Update VP_LOGS.md, DOC.md, and DOC_COMMON.md with everything you know. List all active workers.',
+          content: `CONTEXT LIMIT APPROACHING. Before restart you MUST:\n1. Open PRs for any branches with completed work (use open_pr)\n2. Kill workers that are stuck or done\n3. Update VP_LOGS.md with: what was accomplished, which branches have PRs, what remains\n4. Update DOC.md and DOC_COMMON.md with learnings${workerSummary}`,
         });
 
         await generateText({

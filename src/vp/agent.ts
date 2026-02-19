@@ -100,9 +100,24 @@ export function createVPTools(state: VPState) {
         if (session.status !== 'active') return `Worker ${worker_id} is ${session.status}`;
 
         state.log(`[tool:continue_worker] ${approve ? 'Approving' : 'Denying'} worker ${worker_id}...`);
-        const { content } = await state.mcpClient.continueSession(session.threadId, approve, message);
-        state.tracker.logEvent('worker_continued', { id: worker_id, approve });
 
+        let content: string;
+        try {
+          ({ content } = await state.mcpClient.continueSession(session.threadId, approve, message));
+        } catch (err) {
+          // Session finished or has no pending permission — mark worker done
+          session.status = 'done';
+          state.tracker.logEvent('worker_done', { id: worker_id, reason: String(err) });
+          return `Worker ${worker_id} finished (session ended). Open a PR for branch "${session.branch}" if work is ready.`;
+        }
+
+        // Detect "DONE" in worker response — auto-mark finished
+        if (content.includes('**DONE.**')) {
+          session.status = 'done';
+          state.tracker.logEvent('worker_done', { id: worker_id });
+        }
+
+        state.tracker.logEvent('worker_continued', { id: worker_id, approve });
         return `Worker ${worker_id} response:\n${content}`;
       },
     }),
@@ -135,7 +150,7 @@ export function createVPTools(state: VPState) {
       },
     }),
 
-    shell: tool({
+    shell_command: tool({
       description: 'Run a shell command asynchronously. Returns stdout, stderr, and exit code.',
       inputSchema: z.object({
         command: z.string().describe('The shell command to run'),
@@ -144,7 +159,7 @@ export function createVPTools(state: VPState) {
       }),
       execute: async ({ command, cwd, timeout_ms }) => {
         const workDir = cwd || state.companyConfig.repo;
-        state.log(`[tool:shell] ${command}`);
+        state.log(`[tool:shell_command] ${command}`);
         const result = await execShell(command, { cwd: workDir, timeout: timeout_ms });
         return formatShellResult(result);
       },
@@ -225,7 +240,11 @@ export function createVPTools(state: VPState) {
       inputSchema: z.object({
         branch: z.string(),
         title: z.string(),
-        description: z.string().describe('Markdown description of what changed and why'),
+        description: z.string().describe(`Markdown PR description. MUST follow this structure:
+### Problem — What was wrong or missing? Why does this PR exist? (1-2 sentences)
+### Solution — What does this PR do? Name files, functions, approach. (bullet points)
+### Testing — How was this tested? Commands to run, expected output. (bullet points)
+### Before/After — Concrete numbers if applicable (test count, coverage, etc.)`),
         images: z.array(z.object({
           path: z.string().describe('Path relative to repo root (e.g. "screenshots/dashboard.png")'),
           caption: z.string().describe('Image caption'),
