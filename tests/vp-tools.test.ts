@@ -33,6 +33,7 @@ function makeState(): VPState {
     departmentDir,
     companyDir,
     log: () => {},
+    pendingImages: [],
   };
 }
 

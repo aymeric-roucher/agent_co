@@ -1,14 +1,22 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, copyFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import path from 'path';
+import { execShell, formatShellResult } from './shell.js';
 import type { DepartmentConfig, CompanyConfig } from '../config.js';
 import type { Tracker } from '../tracker.js';
 import type { WorkerSession } from '../workers/types.js';
 import type { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createWorktree, removeWorktree } from '../git.js';
+import { readFileContent, isImageFile } from './read-file.js';
+
+export interface PendingImage {
+  base64: string;
+  mimeType: string;
+  filePath: string;
+}
 
 export interface VPState {
   config: DepartmentConfig;
@@ -20,6 +28,7 @@ export interface VPState {
   departmentDir: string;
   companyDir: string;
   log: (msg: string) => void;
+  pendingImages: PendingImage[];
 }
 
 function bootstrapWorkerInstructions(state: VPState): string {
@@ -59,7 +68,8 @@ export function createVPTools(state: VPState) {
         }
 
         state.log(`[tool:start_worker] Creating worktree for branch ${branch_name}...`);
-        const worktreePath = createWorktree(state.companyConfig.repo, branch_name);
+        const worktreeBase = path.join(state.departmentDir, 'worktrees');
+        const worktreePath = createWorktree(state.companyConfig.repo, branch_name, worktreeBase);
 
         const instructions = bootstrapWorkerInstructions(state);
         writeFileSync(path.join(worktreePath, 'CLAUDE.md'), instructions);
@@ -125,19 +135,49 @@ export function createVPTools(state: VPState) {
       },
     }),
 
-    run_bash: tool({
-      description: 'Run a bash command directly (for screenshots, git operations, inspecting files, etc.)',
+    shell: tool({
+      description: 'Run a shell command asynchronously. Returns stdout, stderr, and exit code.',
       inputSchema: z.object({
-        command: z.string().describe('The bash command to run'),
+        command: z.string().describe('The shell command to run'),
         cwd: z.string().optional().describe('Working directory (defaults to repo root)'),
+        timeout_ms: z.number().optional().describe('Timeout in ms (default 120000)'),
       }),
-      execute: async ({ command, cwd: cmdCwd }) => {
-        const workDir = cmdCwd || state.companyConfig.repo;
-        state.log(`[tool:run_bash] ${command}`);
-        const output = execSync(command, {
-          cwd: workDir, encoding: 'utf-8', stdio: 'pipe', timeout: 120_000,
-        });
-        return output.trim() || '(no output)';
+      execute: async ({ command, cwd, timeout_ms }) => {
+        const workDir = cwd || state.companyConfig.repo;
+        state.log(`[tool:shell] ${command}`);
+        const result = await execShell(command, { cwd: workDir, timeout: timeout_ms });
+        return formatShellResult(result);
+      },
+    }),
+
+    read_file: tool({
+      description: 'Read a file. For text files returns numbered lines. For images returns base64 data the model can view.',
+      inputSchema: z.object({
+        file_path: z.string().describe('Absolute path to the file'),
+        offset: z.number().optional().describe('1-indexed start line (default 1)'),
+        limit: z.number().optional().describe('Max lines to return (default 2000)'),
+        mode: z.enum(['slice', 'indentation']).optional().describe('Read mode (default slice)'),
+        anchor_line: z.number().optional().describe('Indentation mode: anchor line number'),
+        max_levels: z.number().optional().describe('Indentation mode: max indent levels to collect (0=unlimited)'),
+        include_siblings: z.boolean().optional().describe('Indentation mode: include sibling blocks'),
+      }),
+      execute: async ({ file_path, offset, limit, mode, anchor_line, max_levels, include_siblings }) => {
+        if (!existsSync(file_path)) throw new Error(`File not found: ${file_path}`);
+
+        if (isImageFile(file_path)) {
+          const buf = readFileSync(file_path);
+          const ext = file_path.slice(file_path.lastIndexOf('.') + 1).toLowerCase();
+          const mimeType = ext === 'svg' ? 'image/svg+xml' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+          state.pendingImages.push({ base64: buf.toString('base64'), mimeType, filePath: file_path });
+          state.log(`[tool:read_file] Image ${file_path} (${buf.length} bytes) — queued for visual inspection`);
+          return `Image ${file_path} (${buf.length} bytes, ${mimeType}) — will be shown in next message for visual inspection.`;
+        }
+
+        const content = readFileSync(file_path, 'utf-8');
+        const indentation = (mode === 'indentation')
+          ? { anchorLine: anchor_line, maxLevels: max_levels ?? 0, includeSiblings: include_siblings ?? false, includeHeader: true }
+          : undefined;
+        return readFileContent(content, { filePath: file_path, offset, limit, mode, indentation });
       },
     }),
 
@@ -181,7 +221,7 @@ export function createVPTools(state: VPState) {
     }),
 
     open_pr: tool({
-      description: 'Push branch and open a pull request. Images (committed to branch) are embedded in the PR body.',
+      description: 'Commit all changes on the branch, push, and open a pull request. Images are embedded in the PR body.',
       inputSchema: z.object({
         branch: z.string(),
         title: z.string(),
@@ -194,8 +234,33 @@ export function createVPTools(state: VPState) {
       execute: async ({ branch, title, description, images }) => {
         const repo = state.companyConfig.repo;
 
+        // Find the worktree for this branch and commit all changes there
+        const session = [...state.sessions.values()].find((s) => s.branch === branch);
+        const worktreeDir = session?.worktreePath ?? repo;
+
+        // Copy referenced images into the worktree (VP may have saved them at repo root)
+        if (images) {
+          for (const img of images) {
+            const repoPath = path.join(repo, img.path);
+            const wtPath = path.join(worktreeDir, img.path);
+            if (existsSync(repoPath) && !existsSync(wtPath)) {
+              mkdirSync(path.dirname(wtPath), { recursive: true });
+              copyFileSync(repoPath, wtPath);
+              state.log(`[tool:open_pr] Copied ${img.path} into worktree`);
+            }
+          }
+        }
+
+        try {
+          execSync('git add -A', { cwd: worktreeDir, encoding: 'utf-8', stdio: 'pipe' });
+          execSync(`git commit -m "${title}"`, { cwd: worktreeDir, encoding: 'utf-8', stdio: 'pipe' });
+          state.log(`[tool:open_pr] Committed changes in ${worktreeDir}`);
+        } catch {
+          state.log(`[tool:open_pr] Nothing to commit in ${worktreeDir}`);
+        }
+
         // Push the branch
-        execSync(`git push -u origin "${branch}"`, { cwd: repo, encoding: 'utf-8', stdio: 'pipe' });
+        execSync(`git push -u origin "${branch}"`, { cwd: worktreeDir, encoding: 'utf-8', stdio: 'pipe' });
 
         // Get GitHub repo slug (owner/repo)
         const remoteUrl = execSync('gh repo view --json nameWithOwner -q .nameWithOwner', {

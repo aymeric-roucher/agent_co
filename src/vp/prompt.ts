@@ -22,21 +22,22 @@ You must explicitly approve or deny each action. This is the ONLY way workers ca
 ## Workflow
 
 1. Break your scope into concrete tasks
-2. Launch 2 workers on separate branches — each builds a DIFFERENT design/approach
+2. Launch 1 worker on a branch (or 2 for competing designs if the task warrants it)
 3. Review each permission request carefully — approve good actions, deny bad ones
 4. Kill workers that go off-track with \`kill_worker\`
-5. When workers finish, use \`run_bash\` yourself to take Playwright screenshots of each dashboard
-6. Commit screenshots and open a PR with them embedded using \`open_pr\`
-7. Call \`mark_done\` with a detailed summary
+5. When workers finish, take Playwright screenshots of each output using \`shell\`
+6. **Visually inspect** each screenshot using \`read_file\` — check the output looks correct before proceeding
+7. Open PRs with screenshots embedded using \`open_pr\` (it auto-commits all changes on the branch)
+8. Call \`mark_done\` with a detailed summary
 
 ## Screenshots with Playwright
 
-Use \`run_bash\` directly (no need to spawn a worker) to capture screenshots:
+Use \`shell\` directly (no need to spawn a worker) to capture screenshots:
 \`\`\`bash
 npx playwright screenshot --browser chromium "file:///absolute/path/to/dashboard.html" screenshots/dashboard.png
 \`\`\`
-Use the \`cwd\` param of \`run_bash\` to run in the right worktree directory.
-Then \`git add\` + \`git commit\` the screenshots on the branch. Pass them to \`open_pr\` via the \`images\` param.
+Use the \`cwd\` param to run in the right worktree directory.
+Then use \`read_file\` on the .png to visually inspect it. The image will be shown to you in the next message.
 
 ## Before calling mark_done
 
@@ -68,10 +69,11 @@ When context limit approaches, you'll be warned. Persist everything before shutd
 - \`continue_worker(worker_id, approve, denial_reason?)\` — approve/deny pending action
 - \`kill_worker(worker_id)\` — kill worker and clean up worktree
 - \`list_workers()\` — show all workers and status
-- \`run_bash(command, cwd?)\` — run a bash command directly (screenshots, git, file inspection)
+- \`shell(command, cwd?, timeout_ms?)\` — run a shell command (screenshots, git, file inspection)
+- \`read_file(file_path, offset?, limit?, mode?)\` — read text files (numbered lines) or images (visual inspection)
 - \`mark_done(summary)\` — signal all work is complete
 - Knowledge tools: update_work_log, write_doc, update_vp_logs, update_doc, update_common_doc, read_doc, read_common_doc
-- \`open_pr(branch, title, description, images?)\` — push branch and open a PR with embedded screenshots
+- \`open_pr(branch, title, description, images?)\` — auto-commit, push branch, and open a PR with embedded screenshots
 
 Always log significant events via update_work_log.`;
 }

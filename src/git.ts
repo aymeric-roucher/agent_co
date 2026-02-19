@@ -7,9 +7,9 @@ export interface WorktreeInfo {
   head: string;
 }
 
-export function createWorktree(repo: string, branch: string): string {
-  const worktreeBase = path.join(repo, '..', 'worktrees');
-  const worktreePath = path.join(worktreeBase, branch);
+export function createWorktree(repo: string, branch: string, worktreeBase?: string): string {
+  const base = worktreeBase ?? path.join(repo, '..', 'worktrees');
+  const worktreePath = path.join(base, branch);
   // Clean up stale branch/worktree from previous runs
   const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: repo, encoding: 'utf-8' }).trim();
   if (branch !== currentBranch) {

@@ -50,6 +50,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
     departmentDir,
     companyDir: COMPANY_DIR,
     log,
+    pendingImages: [],
   };
 
   const tools = createVPTools(state);
@@ -169,7 +170,21 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
 
       if (!state.done) {
         await sleep(5000);
-        messages.push({ role: 'user', content: 'Continue.' });
+
+        // Inject any pending images as multimodal user messages so the VP can visually inspect them
+        if (state.pendingImages.length > 0) {
+          const parts: Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mimeType: string }> = [
+            { type: 'text', text: 'Here are the images you requested. Visually inspect them and continue.' },
+          ];
+          for (const img of state.pendingImages) {
+            parts.push({ type: 'text', text: img.filePath });
+            parts.push({ type: 'image', image: img.base64, mimeType: img.mimeType });
+          }
+          state.pendingImages = [];
+          messages.push({ role: 'user', content: parts as any });
+        } else {
+          messages.push({ role: 'user', content: 'Continue.' });
+        }
       }
     }
   } finally {
