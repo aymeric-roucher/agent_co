@@ -78,19 +78,20 @@ export function createVPTools(state: VPState) {
     }),
 
     continue_worker: tool({
-      description: 'Send a follow-up message to a running worker and get its response.',
+      description: 'Approve or deny the worker\'s pending action, optionally with guidance.',
       inputSchema: z.object({
         worker_id: z.string().describe('Worker ID'),
-        message: z.string().describe('Message to send to the worker'),
+        approve: z.boolean().describe('Whether to approve the pending action'),
+        message: z.string().optional().describe('Optional feedback or denial reason'),
       }),
-      execute: async ({ worker_id, message }) => {
+      execute: async ({ worker_id, approve, message }) => {
         const session = state.sessions.get(worker_id);
         if (!session) return `Worker ${worker_id} not found`;
         if (session.status !== 'active') return `Worker ${worker_id} is ${session.status}`;
 
-        state.log(`[tool:continue_worker] Sending to worker ${worker_id}...`);
-        const { content } = await state.mcpClient.continueSession(session.threadId, message);
-        state.tracker.logEvent('worker_continued', { id: worker_id });
+        state.log(`[tool:continue_worker] ${approve ? 'Approving' : 'Denying'} worker ${worker_id}...`);
+        const { content } = await state.mcpClient.continueSession(session.threadId, approve, message);
+        state.tracker.logEvent('worker_continued', { id: worker_id, approve });
 
         return `Worker ${worker_id} response:\n${content}`;
       },

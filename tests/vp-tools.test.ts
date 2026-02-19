@@ -45,21 +45,21 @@ afterEach(() => rmSync(TMP, { recursive: true, force: true }));
 
 describe('VP tools', () => {
   // --- continue_worker ---
-  it('continue_worker calls MCP continueSession and returns response', async () => {
+  it('continue_worker calls continueSession with approve and returns response', async () => {
     const state = makeState();
     const tools = createVPTools(state);
     state.sessions.set('w1', fakeSession('w1', 'branch-a'));
 
-    const result = await tools.continue_worker.execute!({ worker_id: 'w1', message: 'keep going' }, opts('1'));
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', approve: true, message: 'looks good' }, opts('1'));
     expect(result).toContain('Worker w1 response');
     expect(result).toContain('Worker continued working');
-    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', 'keep going');
+    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', true, 'looks good');
   });
 
   it('continue_worker returns not found for unknown id', async () => {
     const state = makeState();
     const tools = createVPTools(state);
-    const result = await tools.continue_worker.execute!({ worker_id: 'nope', message: 'hi' }, opts('1'));
+    const result = await tools.continue_worker.execute!({ worker_id: 'nope', approve: true }, opts('1'));
     expect(result).toContain('not found');
   });
 
@@ -67,7 +67,7 @@ describe('VP tools', () => {
     const state = makeState();
     const tools = createVPTools(state);
     state.sessions.set('w1', fakeSession('w1', 'b', 'done'));
-    const result = await tools.continue_worker.execute!({ worker_id: 'w1', message: 'hi' }, opts('1'));
+    const result = await tools.continue_worker.execute!({ worker_id: 'w1', approve: true }, opts('1'));
     expect(result).toContain('is done');
   });
 

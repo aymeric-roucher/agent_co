@@ -17,12 +17,12 @@ vp list / status
 
 **VP Loop**: `generateText` (AI SDK v6) in a while loop with tools. Loop runs until VP calls `mark_done`.
 
-**Workers (Claude Code)**: Each worker is a Claude Code session running via the `@anthropic-ai/claude-code` SDK. The VP is the human-in-the-loop — every tool use (edit, write, bash) requires VP approval.
+**Workers (Claude Code)**: Each worker is a Claude Code session running via `@anthropic-ai/claude-agent-sdk`. The VP is the human-in-the-loop — every tool use (edit, write, bash) requires VP approval via the `canUseTool` callback.
 
 ### Worker control flow
 
 1. `start_worker(task, branch)` spawns Claude Code in a git worktree. Claude Code explores, thinks, then hits its first tool use that needs permission — and **blocks**. The tool call returns the permission request to the VP.
-2. The VP reviews the request and calls `continue_worker(worker_id, response)` with approval, denial, or guidance. This unblocks Claude Code.
+2. The VP reviews the request and calls `continue_worker(worker_id, approve, message?)` with approval or denial. This unblocks Claude Code.
 3. Claude Code executes (if approved) or adjusts (if denied), then continues until the **next** permission request — and blocks again.
 4. Repeat until Claude Code finishes. The VP controls every single action.
 
@@ -32,7 +32,7 @@ No `--dangerously-skip-permissions`. No `--allowedTools`. The VP approves each a
 
 ## Stack
 
-TypeScript, Vercel AI SDK v6, Claude Code SDK (`@anthropic-ai/claude-code`), Commander CLI, Zod, YAML config.
+TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Commander CLI, Zod 4, YAML config.
 
 ## File Structure
 

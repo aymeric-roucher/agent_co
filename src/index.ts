@@ -129,19 +129,14 @@ program
 
     const deptDir = path.join('company', 'workspaces', dept.slug);
     const logsDir = path.join('company', 'logs', dept.slug);
-    const filesToDelete = [
-      path.join(deptDir, 'VP_LOGS.md'), path.join(deptDir, 'DOC.md'), path.join(deptDir, 'WORK.md'),
-      path.join(logsDir, 'events.jsonl'), path.join(logsDir, 'vp-output.log'), path.join(logsDir, 'work-snapshots'),
-      path.join(deptDir, 'plans'), path.join(deptDir, 'prds'),
-    ];
 
-    const existing = filesToDelete.filter(f => existsSync(f));
-    if (existing.length === 0) { console.log(`Nothing to reset for "${slug}".`); process.exit(0); }
+    const dirsToWipe = [deptDir, logsDir].filter(f => existsSync(f));
+    if (dirsToWipe.length === 0) { console.log(`Nothing to reset for "${slug}".`); process.exit(0); }
 
-    console.log(`\nWill delete for "${slug}":\n${existing.map(f => `  - ${f}`).join('\n')}`);
+    console.log(`\nWill wipe for "${slug}":\n${dirsToWipe.map(f => `  - ${f}/`).join('\n')}`);
     if (!options.force) { console.log(`\nRun with --force to confirm.`); process.exit(0); }
 
-    for (const file of existing) execSync(`rm -rf "${file}"`, { stdio: 'pipe' });
+    for (const dir of dirsToWipe) execSync(`rm -rf "${dir}"`, { stdio: 'pipe' });
 
     // Clean up worktrees created by this department's workers
     const mainBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: config.repo, encoding: 'utf-8' }).trim();
