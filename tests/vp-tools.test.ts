@@ -193,4 +193,75 @@ describe('VP tools', () => {
     expect(result).toContain('line 1');
     expect(result).toContain('line 2');
   });
+
+  // --- read_file ---
+  it('read_file returns numbered lines for text files', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    const filePath = path.join(TMP, 'test.txt');
+    writeFileSync(filePath, 'line one\nline two\nline three\n');
+
+    const result = await tools.read_file.execute!(
+      { file_path: filePath, offset: undefined, limit: undefined, mode: undefined, anchor_line: undefined, max_levels: undefined, include_siblings: undefined },
+      opts('1'),
+    );
+    expect(result).toContain('line one');
+    expect(result).toContain('line two');
+  });
+
+  it('read_file throws for missing file', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+
+    await expect(
+      tools.read_file.execute!(
+        { file_path: '/tmp/does-not-exist-xyz.txt', offset: undefined, limit: undefined, mode: undefined, anchor_line: undefined, max_levels: undefined, include_siblings: undefined },
+        opts('1'),
+      ),
+    ).rejects.toThrow('File not found');
+  });
+
+  it('read_file queues image for visual inspection', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    const imgPath = path.join(TMP, 'screenshot.png');
+    // Write a minimal PNG-like buffer (doesn't need to be valid for this test)
+    writeFileSync(imgPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const result = await tools.read_file.execute!(
+      { file_path: imgPath, offset: undefined, limit: undefined, mode: undefined, anchor_line: undefined, max_levels: undefined, include_siblings: undefined },
+      opts('1'),
+    );
+    expect(result).toContain('Image');
+    expect(result).toContain('image/png');
+    expect(state.pendingImages).toHaveLength(1);
+    expect(state.pendingImages[0].filePath).toBe(imgPath);
+  });
+
+  // --- start_worker max workers ---
+  it('start_worker throws when MAX_WORKERS reached', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    // Add 3 active sessions to hit the limit
+    state.sessions.set('w1', fakeSession('w1', 'b1'));
+    state.sessions.set('w2', fakeSession('w2', 'b2'));
+    state.sessions.set('w3', fakeSession('w3', 'b3'));
+
+    await expect(
+      tools.start_worker.execute!({ task: 'test', branch_name: 'b4' }, opts('1')),
+    ).rejects.toThrow('Cannot start worker');
+  });
+
+  // --- continue_worker with denial_reason ---
+  it('continue_worker passes denial reason to continueSession', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    state.sessions.set('w1', fakeSession('w1', 'branch-a'));
+
+    await tools.continue_worker.execute!(
+      { worker_id: 'w1', approve: false, denial_reason: 'bad approach' },
+      opts('1'),
+    );
+    expect(state.mcpClient.continueSession).toHaveBeenCalledWith('thread-abc', false, 'bad approach');
+  });
 });

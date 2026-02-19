@@ -44,4 +44,32 @@ describe('Tracker', () => {
     const eventsPath = path.join(TMP, 'test-dept', 'events.jsonl');
     expect(existsSync(eventsPath)).toBe(false);
   });
+
+  it('logStep writes vp_step event for non-empty tool calls', () => {
+    const tracker = new Tracker('test-dept', TMP);
+    const toolCalls = [
+      { name: 'shell', args: { command: 'ls' } },
+      { name: 'read_file', args: { file_path: '/tmp/x' } },
+    ];
+    tracker.logStep(toolCalls);
+
+    const eventsPath = path.join(TMP, 'test-dept', 'events.jsonl');
+    const lines = readFileSync(eventsPath, 'utf-8').trim().split('\n');
+    expect(lines).toHaveLength(1);
+
+    const event = JSON.parse(lines[0]);
+    expect(event.type).toBe('vp_step');
+    expect(event.data.toolCalls).toEqual(toolCalls);
+  });
+
+  it('logEvent produces valid JSON with ISO timestamps', () => {
+    const tracker = new Tracker('test-dept', TMP);
+    tracker.logEvent('custom_event', { hello: 'world', count: 3 });
+
+    const eventsPath = path.join(TMP, 'test-dept', 'events.jsonl');
+    const parsed = JSON.parse(readFileSync(eventsPath, 'utf-8').trim());
+    expect(parsed.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(parsed.data.hello).toBe('world');
+    expect(parsed.data.count).toBe(3);
+  });
 });

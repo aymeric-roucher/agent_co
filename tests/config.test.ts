@@ -37,7 +37,26 @@ describe('config', () => {
     expect(() => loadConfig(configPath)).toThrow();
   });
 
-  it('creates department directories', () => {
-    expect(typeof ensureDepartmentDirs).toBe('function');
+  it('creates department directories with correct structure', () => {
+    // Override COMPANY_DIR by creating config pointing to TMP
+    const { existsSync } = require('fs');
+    // Use the function directly — it creates under the default COMPANY_DIR constant,
+    // so we test it creates the expected subdirectories
+    const tmpConfig: CompanyConfig = {
+      repo: '/tmp/test-repo',
+      worker_type: 'claude_code',
+      departments: [
+        { slug: 'dept-a', name: 'A', description: 'a' },
+        { slug: 'dept-b', name: 'B', description: 'b' },
+      ],
+    };
+
+    ensureDepartmentDirs(tmpConfig);
+
+    for (const slug of ['dept-a', 'dept-b']) {
+      expect(existsSync(path.join('company', 'workspaces', slug, 'plans'))).toBe(true);
+      expect(existsSync(path.join('company', 'workspaces', slug, 'prds'))).toBe(true);
+      expect(existsSync(path.join('company', 'logs', slug, 'work-snapshots'))).toBe(true);
+    }
   });
 });
