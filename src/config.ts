@@ -13,6 +13,7 @@ const CompanyConfigSchema = z.object({
   repo: z.string(),
   worker_type: z.enum(['claude_code', 'codex']),
   departments: z.array(DepartmentSchema),
+  whatsapp_number: z.string().optional(),
 });
 
 export type DepartmentConfig = z.infer<typeof DepartmentSchema>;

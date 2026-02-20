@@ -11,6 +11,7 @@ import type { WorkerSession } from '../workers/types.js';
 import type { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createWorktree, removeWorktree } from '../git.js';
 import { readFileContent, isImageFile } from './read-file.js';
+import type { WhatsAppClient } from '../whatsapp/client.js';
 
 export interface PendingImage {
   base64: string;
@@ -29,6 +30,7 @@ export interface VPState {
   companyDir: string;
   log: (msg: string) => void;
   pendingImages: PendingImage[];
+  whatsapp: WhatsAppClient | null;
 }
 
 function bootstrapWorkerInstructions(state: VPState): string {
@@ -349,6 +351,28 @@ export function createVPTools(state: VPState) {
       execute: async () => {
         const p = path.join(state.companyDir, 'DOC_COMMON.md');
         return existsSync(p) ? readFileSync(p, 'utf-8') : '(empty)';
+      },
+    }),
+
+    ask_user_feedback: tool({
+      description: 'Send a WhatsApp message to the user and wait for their reply. Use when you need human input on a decision.',
+      inputSchema: z.object({
+        question: z.string().describe('The question to ask the user'),
+        timeout_minutes: z.number().optional().describe('How long to wait for reply (default 5)'),
+      }),
+      execute: async ({ question, timeout_minutes }) => {
+        if (!state.whatsapp) throw new Error('WhatsApp not configured. Run `vp whatsapp-login` first.');
+        const jid = state.whatsapp.userJid;
+        if (!jid) throw new Error('WhatsApp connected but user JID not available');
+
+        const timeoutMs = (timeout_minutes ?? 5) * 60_000;
+        const prefix = `[${state.config.name} VP]`;
+
+        state.log(`[tool:ask_user_feedback] Sending: ${question}`);
+        const reply = await state.whatsapp.sendAndWaitForReply(jid, `${prefix} ${question}`, timeoutMs);
+        state.log(`[tool:ask_user_feedback] Reply: ${reply}`);
+        state.tracker.logEvent('user_feedback', { question, reply });
+        return `User replied: ${reply}`;
       },
     }),
   };

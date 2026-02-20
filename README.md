@@ -5,7 +5,7 @@ Agentic VPs manage coding agent teams autonomously. Each VP is a long-running da
 ## Quick Start
 
 ```bash
-npm install && npm link
+npm install && npm link    # Always use `vp` commands after linking, never bare `node`
 cd /path/to/your/repo
 vp setup          # Pick worker type, areas, .gitignore
 vp start <slug>   # Start a VP daemon
@@ -32,7 +32,17 @@ No `--dangerously-skip-permissions`. No `--allowedTools`. The VP approves each a
 
 ## Stack
 
-TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Commander CLI, Zod 4, YAML config.
+TypeScript, Vercel AI SDK v6, Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), Baileys (WhatsApp), Commander CLI, Zod 4, YAML config.
+
+## WhatsApp Feedback
+
+VPs can ask the user questions via WhatsApp using the `ask_user_feedback` tool. One-time setup:
+
+```bash
+vp whatsapp-login    # Scan QR code to link — number auto-detected
+```
+
+After setup, the VP sends questions and waits for your reply — fully headless.
 
 ## File Structure
 
@@ -47,11 +57,15 @@ src/
     agent.ts            # VP tool definitions
     loop.ts             # VP daemon event loop
     prompt.ts           # VP system prompt
+  whatsapp/
+    client.ts           # Baileys WhatsApp client
+    login.ts            # QR login helper
   workers/
     claude-code-client.ts  # Claude Code SDK client
     types.ts               # WorkerSession types
 company/                # Runtime data (gitignored)
   config.yaml
+  whatsapp-auth/        # WhatsApp credentials (auto-created)
   workspaces/{slug}/    VP_LOGS.md, DOC.md, WORK.md
   logs/{slug}/          events.jsonl, vp-output.log
 ```
@@ -61,3 +75,9 @@ company/                # Runtime data (gitignored)
 ```bash
 npm test
 ```
+
+
+## What I ripped off
+
+- Patch implementation, shell_session, read_file: directly taken from [Codex](https://github.com/openai/codex)
+- WhatsApp authentification through Baileys: from [OpenClaw](https://github.com/openclaw/openclaw)

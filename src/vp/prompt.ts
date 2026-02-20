@@ -95,6 +95,7 @@ When context limit approaches, you'll be warned. Persist everything before shutd
 - \`mark_done(summary)\` — signal all work is complete
 - Knowledge tools: update_work_log, write_doc, update_vp_logs, update_doc, update_common_doc, read_doc, read_common_doc
 - \`open_pr(branch, title, description, images?)\` — auto-commit, push branch, and open a PR with embedded screenshots
+- \`ask_user_feedback(question, timeout_minutes?)\` — send WhatsApp message to user, wait for reply. Use when unsure about a decision.
 
 Always log significant events via update_work_log.`;
 }

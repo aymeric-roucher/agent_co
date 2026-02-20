@@ -8,6 +8,7 @@ import type { WorkerSession } from '../workers/types.js';
 import { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createVPTools, type VPState } from './agent.js';
 import { buildVPPrompt } from './prompt.js';
+import { createWhatsAppClient, type WhatsAppClient } from '../whatsapp/client.js';
 
 function readFileOrEmpty(p: string): string {
   return existsSync(p) ? readFileSync(p, 'utf-8') : '';
@@ -40,6 +41,14 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
   const mcpClient = new ClaudeCodeClient(log);
   log('Claude Code client ready');
 
+  let whatsapp: WhatsAppClient | null = null;
+  const waAuthDir = path.join(COMPANY_DIR, 'whatsapp-auth');
+  if (existsSync(waAuthDir)) {
+    whatsapp = await createWhatsAppClient(waAuthDir);
+    await whatsapp.connect();
+    log(`WhatsApp connected (user: ${whatsapp.userJid})`);
+  }
+
   const state: VPState = {
     config: department,
     companyConfig,
@@ -51,6 +60,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
     companyDir: COMPANY_DIR,
     log,
     pendingImages: [],
+    whatsapp,
   };
 
   const tools = createVPTools(state);
@@ -197,6 +207,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
       }
     }
   } finally {
+    state.whatsapp?.disconnect();
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     log(`\n## Done (${elapsed}s total).`);
   }

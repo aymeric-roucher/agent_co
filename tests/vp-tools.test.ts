@@ -34,6 +34,7 @@ function makeState(): VPState {
     companyDir,
     log: () => {},
     pendingImages: [],
+    whatsapp: null,
   };
 }
 
@@ -205,6 +206,51 @@ describe('VP tools', () => {
     expect(result).toContain('finished');
     expect(result).toContain('feat-branch');
     expect(state.sessions.get('w1')!.status).toBe('done');
+  });
+
+  // --- ask_user_feedback ---
+  it('ask_user_feedback throws when whatsapp is null', async () => {
+    const state = makeState();
+    const tools = createVPTools(state);
+    await expect(tools.ask_user_feedback.execute!({ question: 'test?' }, opts('1')))
+      .rejects.toThrow('WhatsApp not configured');
+  });
+
+  it('ask_user_feedback sends question and returns reply', async () => {
+    const state = makeState();
+    state.whatsapp = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      sendAndWaitForReply: vi.fn().mockResolvedValue('Looks good, ship it'),
+      userJid: '33612345678@s.whatsapp.net',
+    };
+    const tools = createVPTools(state);
+
+    const result = await tools.ask_user_feedback.execute!({ question: 'Should I merge?' }, opts('1'));
+    expect(result).toContain('Looks good, ship it');
+    expect(state.whatsapp.sendAndWaitForReply).toHaveBeenCalledWith(
+      '33612345678@s.whatsapp.net',
+      expect.stringContaining('Should I merge?'),
+      5 * 60_000,
+    );
+  });
+
+  it('ask_user_feedback respects custom timeout', async () => {
+    const state = makeState();
+    state.whatsapp = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      sendAndWaitForReply: vi.fn().mockResolvedValue('yes'),
+      userJid: '33612345678@s.whatsapp.net',
+    };
+    const tools = createVPTools(state);
+
+    await tools.ask_user_feedback.execute!({ question: 'Q?', timeout_minutes: 10 }, opts('1'));
+    expect(state.whatsapp.sendAndWaitForReply).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      10 * 60_000,
+    );
   });
 
   // --- continue_worker: detects DONE in response ---

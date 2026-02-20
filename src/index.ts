@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
 import { listWorktrees, removeWorktree } from './git.js';
+import { whatsappLogin } from './whatsapp/login.js';
 
 const program = new Command();
 program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
@@ -152,6 +153,25 @@ program
     }
 
     console.log(`\n✓ Memory wiped for "${slug}". Run 'vp start ${slug}' to begin fresh.`);
+  });
+
+program
+  .command('dashboard')
+  .description('Launch monitoring dashboard')
+  .option('-p, --port <number>', 'Port', '3000')
+  .action(async (options: { port: string }) => {
+    const { startDashboard } = await import('./dashboard.js');
+    startDashboard(parseInt(options.port));
+  });
+
+program
+  .command('whatsapp-login')
+  .description('One-time WhatsApp QR code login')
+  .action(async () => {
+    await whatsappLogin(path.join('company', 'whatsapp-auth'));
+    // Let Baileys flush creds to disk before exiting
+    await new Promise((r) => setTimeout(r, 1000));
+    process.exit(0);
   });
 
 program.parse();

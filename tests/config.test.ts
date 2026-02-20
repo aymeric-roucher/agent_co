@@ -40,4 +40,19 @@ describe('config', () => {
   it('creates department directories', () => {
     expect(typeof ensureDepartmentDirs).toBe('function');
   });
+
+  it('round-trips config with optional whatsapp_number', () => {
+    const configPath = path.join(TMP, 'config-wa.yaml');
+    const withWA = { ...validConfig, whatsapp_number: '+33612345678' };
+    saveConfig(withWA, configPath);
+    const loaded = loadConfig(configPath);
+    expect(loaded.whatsapp_number).toBe('+33612345678');
+  });
+
+  it('loads config without whatsapp_number (optional)', () => {
+    const configPath = path.join(TMP, 'config.yaml');
+    saveConfig(validConfig, configPath);
+    const loaded = loadConfig(configPath);
+    expect(loaded.whatsapp_number).toBeUndefined();
+  });
 });
