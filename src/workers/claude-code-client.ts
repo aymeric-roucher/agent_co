@@ -1,6 +1,24 @@
 import { query, type Query, type PermissionResult, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'crypto';
 
+function isAssistantWithContent(msg: SDKMessage): msg is SDKMessage & { message: { content: Array<{ type: string; text: string }> } } {
+  const rec = msg as Record<string, unknown>;
+  if (!('message' in msg) || typeof rec.message !== 'object' || rec.message === null) return false;
+  return Array.isArray((rec.message as Record<string, unknown>).content);
+}
+
+function hasNumericCost(msg: SDKMessage): msg is SDKMessage & { total_cost_usd: number } {
+  return 'total_cost_usd' in msg && typeof (msg as Record<string, unknown>).total_cost_usd === 'number';
+}
+
+function hasSubtype(msg: SDKMessage): msg is SDKMessage & { subtype: string } {
+  return 'subtype' in msg && typeof (msg as Record<string, unknown>).subtype === 'string';
+}
+
+function hasSummary(msg: SDKMessage): msg is SDKMessage & { summary: string } {
+  return 'summary' in msg && typeof (msg as Record<string, unknown>).summary === 'string';
+}
+
 interface PendingPermission {
   toolName: string;
   toolInput: Record<string, unknown>;
