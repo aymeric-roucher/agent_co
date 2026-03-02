@@ -29,7 +29,7 @@ const SAFE_COMMAND_PREFIXES = [
 
 // ── Types (mirrors ExecParams / ShellToolCallParams / ShellCommandToolCallParams) ──
 
-export interface ExecParams {
+interface ExecParams {
   command: string[];
   cwd: string;
   timeout_ms: number;
@@ -37,14 +37,14 @@ export interface ExecParams {
   justification?: string;
 }
 
-export interface ShellToolCallParams {
+interface ShellToolCallParams {
   command: string[];
   workdir?: string;
   timeout_ms?: number;
   justification?: string;
 }
 
-export interface ShellCommandToolCallParams {
+interface ShellCommandToolCallParams {
   command: string;
   workdir?: string;
   timeout_ms?: number;

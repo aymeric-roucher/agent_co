@@ -9,6 +9,10 @@ import path from 'path';
 import { listWorktrees, removeWorktree } from './git.js';
 import { whatsappLogin } from './whatsapp/login.js';
 
+function isExecError(err: unknown): err is Error & { status: number } {
+  return err instanceof Error && typeof (err as Record<string, unknown>).status === 'number';
+}
+
 const program = new Command();
 program.name('agents-co').description('Agent Company — agentic VP teams').version('0.1.0');
 
@@ -86,7 +90,7 @@ program
       }
       console.log(`✓ VP stopped for "${slug}" (PIDs: ${pids.join(', ')})`);
     } catch (err) {
-      if ((err as any).status === 1) { console.log(`No running VP found for "${slug}"`); }
+      if (isExecError(err) && err.status === 1) { console.log(`No running VP found for "${slug}"`); }
       else { console.error(`Error: ${err instanceof Error ? err.message : String(err)}`); process.exit(1); }
     }
   });

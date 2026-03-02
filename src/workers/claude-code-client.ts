@@ -145,9 +145,8 @@ export class ClaudeCodeClient {
 
   private processMessage(session: ClaudeSession, msg: SDKMessage): void {
     if (msg.type === 'assistant') {
-      const content = (msg as any).message?.content;
-      if (Array.isArray(content)) {
-        for (const block of content) {
+      if (isAssistantWithContent(msg)) {
+        for (const block of msg.message.content) {
           if (block.type === 'text') session.collectedText.push(block.text);
         }
       }
@@ -155,14 +154,16 @@ export class ClaudeCodeClient {
       const text = session.collectedText.join('\n');
       session.collectedText = [];
       if ('result' in msg && typeof msg.result === 'string') {
-        const cost = (msg as any).total_cost_usd;
+        const cost = hasNumericCost(msg) ? msg.total_cost_usd : undefined;
         this.log(`[claude-code] session completed (cost: $${cost?.toFixed(4) ?? '?'})`);
         this.pushBlock(session, `${text}\n\n**DONE.** Final result:\n${msg.result}`);
       } else {
-        this.pushBlock(session, `${text}\n\n**ERROR:** ${(msg as any).subtype}`);
+        const sub = hasSubtype(msg) ? msg.subtype : undefined;
+        this.pushBlock(session, `${text}\n\n**ERROR:** ${sub}`);
       }
     } else if (msg.type === 'tool_use_summary') {
-      session.collectedText.push(`[Tool: ${(msg as any).summary}]`);
+      const summary = hasSummary(msg) ? msg.summary : undefined;
+      session.collectedText.push(`[Tool: ${summary}]`);
     }
   }
 

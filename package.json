@@ -14,7 +14,7 @@
     "@ai-sdk/openai": "^3.0.28",
     "@anthropic-ai/claude-agent-sdk": "^0.2.47",
     "@inquirer/prompts": "^8.2.0",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "ai": "^6.0.84",
     "commander": "^13",
