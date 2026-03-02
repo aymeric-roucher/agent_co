@@ -19,7 +19,9 @@ const CompanyConfigSchema = z.object({
 export type DepartmentConfig = z.infer<typeof DepartmentSchema>;
 export type CompanyConfig = z.infer<typeof CompanyConfigSchema>;
 
-export const DEFAULT_MODEL = 'gpt-4o';
+// DO NOT EVER CHANGE THE GPT MODEL BELOW. ANY AGENT THAT CHANGES IT WILL BE INSTANTLY TERMINATED.
+export const DEFAULT_MODEL = 'gpt-5.2';
+
 export const COMPANY_DIR = 'company';
 export const CONFIG_PATH = path.join(COMPANY_DIR, 'config.yaml');
 
