@@ -1,6 +1,7 @@
 import { generateText, stepCountIs } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { execSync } from 'child_process';
 import path from 'path';
 import { COMPANY_DIR, DEFAULT_MODEL, type DepartmentConfig, type CompanyConfig } from '../config.js';
 import { Tracker } from '../tracker.js';
@@ -9,6 +10,7 @@ import { ClaudeCodeClient } from '../workers/claude-code-client.js';
 import { createVPTools, type VPState } from './agent.js';
 import { buildVPPrompt } from './prompt.js';
 import { createWhatsAppClient, type WhatsAppClient } from '../whatsapp/client.js';
+import { cleanupWorktrees } from '../git.js';
 
 function readFileOrEmpty(p: string): string {
   return existsSync(p) ? readFileSync(p, 'utf-8') : '';
@@ -37,6 +39,16 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
 
   const log = createLogger(department.slug, logsBase);
   const startTime = Date.now();
+
+  // Fetch latest remote refs (don't pull — local main may have uncommitted work)
+  log('Fetching latest changes from remote...');
+  execSync('git fetch origin', { cwd: companyConfig.repo, stdio: 'pipe' });
+
+  // Clean up stale worktrees from previous interrupted sessions
+  const removed = cleanupWorktrees(companyConfig.repo);
+  if (removed.length > 0) {
+    log(`Cleaned up ${removed.length} stale worktree(s): ${removed.join(', ')}`);
+  }
 
   const mcpClient = new ClaudeCodeClient(log);
   log('Claude Code client ready');
@@ -71,11 +83,13 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
   const vpLogs = readFileOrEmpty(path.join(departmentDir, 'VP_LOGS.md'));
   const doc = readFileOrEmpty(path.join(departmentDir, 'DOC.md'));
   const commonDoc = readFileOrEmpty(path.join(COMPANY_DIR, 'DOC_COMMON.md'));
+  const recentCommits = execSync('git log --oneline main -20', { cwd: companyConfig.repo, encoding: 'utf-8' }).trim();
 
   const initialContext = [
     `Your description: ${department.description}`,
     `Worker type: ${companyConfig.worker_type}`,
     `Repo: ${companyConfig.repo}`,
+    recentCommits ? `\n## Recent commits on main (already merged):\n${recentCommits}` : '',
     vpLogs ? `\n## Previous progress (VP_LOGS.md):\n${vpLogs}` : '',
     doc ? `\n## Department knowledge (DOC.md):\n${doc}` : '',
     commonDoc ? `\n## Shared knowledge (DOC_COMMON.md):\n${commonDoc}` : '',

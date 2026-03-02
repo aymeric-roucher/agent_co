@@ -31,6 +31,28 @@ export function removeWorktree(repo: string, worktreePath: string): void {
   execSync(`git worktree remove "${worktreePath}" --force`, { cwd: repo, stdio: 'pipe' });
 }
 
+/**
+ * Remove all worktrees except the main one.
+ * Call this on VP startup to clean up stale worktrees from interrupted sessions.
+ */
+export function cleanupWorktrees(repo: string): string[] {
+  const mainPath = execSync('git rev-parse --show-toplevel', { cwd: repo, encoding: 'utf-8' }).trim();
+  const worktrees = listWorktrees(repo);
+  const removed: string[] = [];
+  for (const wt of worktrees) {
+    if (wt.path === mainPath) continue;
+    try {
+      execSync(`git worktree remove "${wt.path}" --force`, { cwd: repo, stdio: 'pipe' });
+      removed.push(wt.branch);
+    } catch {
+      // already gone
+    }
+  }
+  // Prune any dangling worktree refs
+  execSync('git worktree prune', { cwd: repo, stdio: 'pipe' });
+  return removed;
+}
+
 export function listWorktrees(repo: string): WorktreeInfo[] {
   const output = execSync('git worktree list --porcelain', { cwd: repo, encoding: 'utf-8' });
   const entries: WorktreeInfo[] = [];
