@@ -1,4 +1,4 @@
-import { generateText, stepCountIs } from 'ai';
+import { generateText, stepCountIs, type ModelMessage } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
@@ -28,6 +28,11 @@ function createLogger(slug: string, logsBase: string) {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Safely check if a value is an object with the given property. */
+function hasProperty<K extends string>(obj: unknown, key: K): obj is Record<K, unknown> {
+  return typeof obj === 'object' && obj !== null && key in obj;
 }
 
 const VP_TIMEOUT_MS = 10 * 60_000;
@@ -95,7 +100,7 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
     commonDoc ? `\n## Shared knowledge (DOC_COMMON.md):\n${commonDoc}` : '',
   ].filter(Boolean).join('\n');
 
-  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+  const messages: ModelMessage[] = [
     { role: 'user', content: initialContext },
   ];
 
@@ -139,15 +144,17 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
             }
 
             for (const tr of toolResults) {
-              const output = (tr as { output: unknown }).output;
+              const output = hasProperty(tr, 'output') ? tr.output : undefined;
               const res = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
-              log(`\n**Result (${(tr as { toolName: string }).toolName}):**\n${res}`);
+              const name = hasProperty(tr, 'toolName') ? String(tr.toolName) : undefined;
+              log(`\n**Result (${name}):**\n${res}`);
             }
 
             for (const part of content) {
               if (part.type === 'tool-error') {
-                const err = part as { toolName: string; error: unknown };
-                log(`\n**Tool error (${err.toolName}):** ${err.error instanceof Error ? err.error.message : String(err.error)}`);
+                const toolName = hasProperty(part, 'toolName') ? String(part.toolName) : undefined;
+                const error = hasProperty(part, 'error') ? part.error : undefined;
+                log(`\n**Tool error (${toolName}):** ${error instanceof Error ? error.message : String(error)}`);
               }
             }
 
@@ -206,15 +213,15 @@ export async function runVP(department: DepartmentConfig, companyConfig: Company
 
         // Inject any pending images as multimodal user messages so the VP can visually inspect them
         if (state.pendingImages.length > 0) {
-          const parts: Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mimeType: string }> = [
+          const contentParts: Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mimeType: string }> = [
             { type: 'text', text: 'Here are the images you requested. Visually inspect them and continue.' },
           ];
           for (const img of state.pendingImages) {
-            parts.push({ type: 'text', text: img.filePath });
-            parts.push({ type: 'image', image: img.base64, mimeType: img.mimeType });
+            contentParts.push({ type: 'text', text: img.filePath });
+            contentParts.push({ type: 'image', image: img.base64, mimeType: img.mimeType });
           }
           state.pendingImages = [];
-          messages.push({ role: 'user', content: parts as any });
+          messages.push({ role: 'user', content: contentParts });
         } else {
           messages.push({ role: 'user', content: 'Continue.' });
         }
