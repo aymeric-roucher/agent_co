@@ -2,21 +2,20 @@ import { query, type Query, type PermissionResult, type SDKMessage } from '@anth
 import { randomUUID } from 'crypto';
 
 function isAssistantWithContent(msg: SDKMessage): msg is SDKMessage & { message: { content: Array<{ type: string; text: string }> } } {
-  const rec = msg as Record<string, unknown>;
-  if (!('message' in msg) || typeof rec.message !== 'object' || rec.message === null) return false;
-  return Array.isArray((rec.message as Record<string, unknown>).content);
+  if (!('message' in msg) || typeof msg.message !== 'object' || msg.message === null) return false;
+  return 'content' in msg.message && Array.isArray(msg.message.content);
 }
 
 function hasNumericCost(msg: SDKMessage): msg is SDKMessage & { total_cost_usd: number } {
-  return 'total_cost_usd' in msg && typeof (msg as Record<string, unknown>).total_cost_usd === 'number';
+  return 'total_cost_usd' in msg && typeof msg.total_cost_usd === 'number';
 }
 
 function hasSubtype(msg: SDKMessage): msg is SDKMessage & { subtype: string } {
-  return 'subtype' in msg && typeof (msg as Record<string, unknown>).subtype === 'string';
+  return 'subtype' in msg && typeof msg.subtype === 'string';
 }
 
 function hasSummary(msg: SDKMessage): msg is SDKMessage & { summary: string } {
-  return 'summary' in msg && typeof (msg as Record<string, unknown>).summary === 'string';
+  return 'summary' in msg && typeof msg.summary === 'string';
 }
 
 interface PendingPermission {
@@ -26,7 +25,7 @@ interface PendingPermission {
 }
 
 interface ClaudeSession {
-  queryHandle: Query;
+  queryHandle: Query | null;
   cwd: string;
   pendingPermission: PendingPermission | null;
   collectedText: string[];
@@ -51,7 +50,7 @@ export class ClaudeCodeClient {
     delete env.CLAUDECODE;
 
     const session: ClaudeSession = {
-      queryHandle: null as unknown as Query,
+      queryHandle: null,
       cwd,
       pendingPermission: null,
       collectedText: [],
@@ -73,7 +72,7 @@ export class ClaudeCodeClient {
           const content = text ? `${text}\n\n---\n\n${description}` : description;
 
           return new Promise<PermissionResult>((resolve) => {
-            session.pendingPermission = { toolName, toolInput: input as Record<string, unknown>, resolve };
+            session.pendingPermission = { toolName, toolInput: input, resolve };
             this.pushBlock(session, content);
           });
         },
@@ -116,14 +115,14 @@ export class ClaudeCodeClient {
   killSession(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
-    session.queryHandle.close();
+    session.queryHandle?.close();
     session.finished = true;
     this.sessions.delete(sessionId);
   }
 
   private async consumeGenerator(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
-    if (!session) return;
+    if (!session?.queryHandle) return;
 
     try {
       for await (const msg of session.queryHandle) {
